@@ -16,7 +16,7 @@ services:
       - db_data:/var/lib/mysql
 
   flask:
-    build: .
+    image: premchanderj/gym-app:latest  # ✅ Use your pushed Docker Hub image
     container_name: gym-app
     ports:
       - "5000:5000"
@@ -27,8 +27,7 @@ services:
       MYSQL_USER: user
       MYSQL_PASSWORD: password
       MYSQL_DB: gymdb
-    volumes:
-      - ./app:/app
+    restart: always
 
 volumes:
   db_data:

@@ -1,3 +1,4 @@
+from flask_script import Manager
 from flask import Flask, render_template, flash, redirect, url_for, request, session, logging
 from flask_mysqldb import MySQL
 from wtforms import Form, StringField, TextAreaField, PasswordField, validators, RadioField, SelectField, IntegerField

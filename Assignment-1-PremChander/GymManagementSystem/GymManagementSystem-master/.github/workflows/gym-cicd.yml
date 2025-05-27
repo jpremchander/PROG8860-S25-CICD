@@ -3,7 +3,7 @@ name: prog8860-assignment1-premchander
 on:
   push:
     branches:
-      - assignment1-fe-branch
+      - assignment-1-fe-branch
 
 
 jobs:

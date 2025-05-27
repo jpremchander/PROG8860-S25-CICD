@@ -6,3 +6,5 @@ Flask-Script==2.0.6
 pytest
 flask-login
 flask-wtf
+MarkupSafe==2.0.1
+Jinja2==3.0.3

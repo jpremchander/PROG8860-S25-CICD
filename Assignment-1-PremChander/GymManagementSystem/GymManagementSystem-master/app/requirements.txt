@@ -1,0 +1,8 @@
+flask
+flask-mysqldb
+wtforms
+passlib
+flask-script
+pytest
+flask-login
+flask-wtf

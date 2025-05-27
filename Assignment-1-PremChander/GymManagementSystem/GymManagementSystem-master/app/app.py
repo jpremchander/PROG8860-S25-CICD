@@ -10,8 +10,8 @@ from datetime import datetime
 app = Flask(__name__)
 
 app.config['MYSQL_HOST'] = 'localhost'
-app.config['MYSQL_USER'] = 'root'
-app.config['MYSQL_PASSWORD'] = 'eswar@259522'
+app.config['MYSQL_USER'] = 'devdbuser'
+app.config['MYSQL_PASSWORD'] = 'devpwd123'
 app.config['MYSQL_DB'] = 'Gym'
 app.config['MYSQL_CURSORCLASS'] = 'DictCursor'
 

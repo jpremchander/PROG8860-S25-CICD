@@ -1,6 +1,6 @@
 flask
 flask-mysqldb
-wtforms
+wtforms>=3.0
 passlib
 flask-script
 pytest

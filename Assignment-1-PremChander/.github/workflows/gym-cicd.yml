@@ -1,61 +1,13 @@
-name: prog8860-assignment1-premchander
+name: CI Test Workflow
 
 on:
-  workflow_dispatch:
   push:
     branches:
       - assignment-1-fe-branch
 
-
 jobs:
-  build-test-deploy:
+  just-print:
     runs-on: ubuntu-latest
-
-    services:
-      mysql:
-        image: mysql:5.7
-        env:
-          MYSQL_ROOT_PASSWORD: root
-          MYSQL_DATABASE: Gym
-          MYSQL_USER: devdbuser
-          MYSQL_PASSWORD: devpwd123
-        ports:
-          - 3306:3306
-        options: >-
-          --health-cmd="mysqladmin ping --silent"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=3
-
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v3
-
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
-
-    - name: Install Python Dependencies
-      run: |
-        cd GymManagementSystem/GymManagementSystem-master
-        pip install -r requirements.txt
-
-    - name: Run Tests with Pytest
-      run: |
-        cd GymManagementSystem/GymManagementSystem-master
-        pytest
-
-    - name: Build Docker Image
-      run: |
-        cd GymManagementSystem/GymManagementSystem-master
-        docker build -t flask-app .
-
-    - name: Run Docker Container
-      run: docker run -d -p 5000:5000 --name running-app flask-app
-
-    - name: Show Running Container
-      run: docker ps
-
-    - name: Stop Docker Container
-      run: docker stop running-app
+      - name: Say Hello
+        run: echo "✅ GitHub Actions is working on this branch"

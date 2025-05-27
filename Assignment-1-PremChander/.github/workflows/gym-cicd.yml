@@ -3,8 +3,7 @@ name: prog8860-assignment1-premchander
 on:
   push:
     branches:
-      - assignment-1-fe-branch  # Trigger on push to this branch
-
+      - assignment-1-fe-branch
 
 jobs:
   build-test-deploy:
@@ -35,18 +34,20 @@ jobs:
       with:
         python-version: '3.9'
 
-    - name: Install dependencies
+    - name: Install Python Dependencies
       run: |
-        cd app
+        cd GymManagementSystem/GymManagementSystem-master
         pip install -r requirements.txt
 
-    - name: Run Test Cases
+    - name: Run Tests with Pytest
       run: |
-        cd app
+        cd GymManagementSystem/GymManagementSystem-master
         pytest
 
     - name: Build Docker Image
-      run: docker build -t flask-app .
+      run: |
+        cd GymManagementSystem/GymManagementSystem-master
+        docker build -t flask-app .
 
     - name: Run Docker Container
       run: docker run -d -p 5000:5000 --name running-app flask-app
@@ -54,5 +55,5 @@ jobs:
     - name: Show Running Container
       run: docker ps
 
-    - name: Stop Container
+    - name: Stop Docker Container
       run: docker stop running-app

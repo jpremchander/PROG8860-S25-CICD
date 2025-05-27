@@ -17,6 +17,7 @@ The GYM MANAGEMENT SYSTEM is to automate everything that happens in the gym. It 
 
 ## 👨‍💻 Author
 Prem Chander Jebastian
+9015480
 
 ## 🚀 Technologies Used
 - Python 3.9

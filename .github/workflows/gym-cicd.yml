@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - assignment-1-fe-branch
+      - assignment-1-fe-branch # Change to your branch name accordingly
 
 jobs:
   build-test-deploy:

@@ -1,20 +1,28 @@
 from flask_script import Manager
 from flask import Flask, render_template, flash, redirect, url_for, request, session, logging
+from flask import Flask, render_template, flash, redirect, url_for, request, session, logging
 from flask_mysqldb import MySQL
 from wtforms import Form, StringField, TextAreaField, PasswordField, validators, RadioField, SelectField, IntegerField
 from wtforms.fields import DateField
 from passlib.hash import sha256_crypt
 from functools import wraps
 from datetime import datetime
+import os
 
 app = Flask(__name__)
 
-
-app.config['MYSQL_HOST'] = 'localhost'
-app.config['MYSQL_USER'] = 'devdbuser'
-app.config['MYSQL_PASSWORD'] = 'devpwd123'
-app.config['MYSQL_DB'] = 'Gym'
+app.config['MYSQL_HOST'] = os.environ.get('MYSQL_HOST', 'localhost')
+app.config['MYSQL_USER'] = os.environ.get('MYSQL_USER', 'devdbuser')
+app.config['MYSQL_PASSWORD'] = os.environ.get('MYSQL_PASSWORD', 'devpwd123')
+app.config['MYSQL_DB'] = os.environ.get('MYSQL_DB', 'Gym')
 app.config['MYSQL_CURSORCLASS'] = 'DictCursor'
+
+
+#app.config['MYSQL_HOST'] = 'localhost'
+#app.config['MYSQL_USER'] = 'devdbuser'
+#app.config['MYSQL_PASSWORD'] = 'devpwd123'
+#app.config['MYSQL_DB'] = 'Gym'
+#app.config['MYSQL_CURSORCLASS'] = 'DictCursor'
 
 mysql = MySQL(app)
 

@@ -71,5 +71,5 @@ jobs:
     - name: Show Running Container
       run: docker ps
 
-    - name: Stop Docker Container
-      run: docker stop running-app
+    #- name: Stop Docker Container
+    # run: docker stop running-app

@@ -3,11 +3,11 @@ from flask_mysqldb import MySQL
 from wtforms import Form, StringField, TextAreaField, PasswordField, validators, RadioField, SelectField, IntegerField
 from wtforms.fields import DateField
 from passlib.hash import sha256_crypt
-from flask_script import Manager
 from functools import wraps
 from datetime import datetime
 
 app = Flask(__name__)
+
 
 app.config['MYSQL_HOST'] = 'localhost'
 app.config['MYSQL_USER'] = 'devdbuser'

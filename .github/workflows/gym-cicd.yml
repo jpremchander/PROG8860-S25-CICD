@@ -6,7 +6,6 @@ on:
     branches:
       - assignment-1-fe-branch
 
-
 jobs:
   build-test-deploy:
     runs-on: ubuntu-latest
@@ -31,6 +30,19 @@ jobs:
     - name: Checkout Code
       uses: actions/checkout@v3
 
+    - name: Debug repo structure
+      run: |
+        echo "Current directory:"
+        pwd
+        echo "List root:"
+        ls -l
+        echo "List GymManagementSystem folder if exists:"
+        ls -l GymManagementSystem || echo "No GymManagementSystem folder"
+        echo "List GymManagementSystem-master folder if exists:"
+        ls -l GymManagementSystem-master || echo "No GymManagementSystem-master folder"
+        echo "List app folder if exists:"
+        ls -l app || echo "No app folder"
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -38,17 +50,17 @@ jobs:
 
     - name: Install Python Dependencies
       run: |
-        cd GymManagementSystem/GymManagementSystem-master/app
+        cd GymManagementSystem-master/app   # Adjust this path if needed based on debug output
         pip install -r requirements.txt
 
     - name: Run Tests with Pytest
       run: |
-        cd GymManagementSystem/GymManagementSystem-master/app
+        cd GymManagementSystem-master/app   # Same here
         pytest
 
     - name: Build Docker Image
       run: |
-        cd GymManagementSystem/GymManagementSystem-master/app
+        cd GymManagementSystem-master/app
         docker build -t flask-app .
 
     - name: Run Docker Container

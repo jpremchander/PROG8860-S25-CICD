@@ -16,7 +16,7 @@ The GYM MANAGEMENT SYSTEM is to automate everything that happens in the gym. It 
  PROG8860 Assignment 1 – CI/CD Pipeline with GitHub Actions
 
 ## 👨‍💻 Author
-Premchander
+Prem Chander Jebastian
 
 ## 🚀 Technologies Used
 - Python 3.9

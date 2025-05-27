@@ -1,6 +1,7 @@
 name: prog8860-assignment1-premchander
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - assignment-1-fe-branch

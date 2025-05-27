@@ -38,17 +38,17 @@ jobs:
 
     - name: Install Python Dependencies
       run: |
-        cd GymManagementSystem/GymManagementSystem-master
+        cd GymManagementSystem/GymManagementSystem-master/app
         pip install -r requirements.txt
 
     - name: Run Tests with Pytest
       run: |
-        cd GymManagementSystem/GymManagementSystem-master
+        cd GymManagementSystem/GymManagementSystem-master/app
         pytest
 
     - name: Build Docker Image
       run: |
-        cd GymManagementSystem/GymManagementSystem-master
+        cd GymManagementSystem/GymManagementSystem-master/app
         docker build -t flask-app .
 
     - name: Run Docker Container

@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         NODE_VERSION = '20'
-        APP_DIR = 'PremChanderJ-Portfolio'
+        APP_DIR = 'PremChanderJ-Portfolio' //APPLICATION DIRECTORY
         PORT = '3001'
     }
 

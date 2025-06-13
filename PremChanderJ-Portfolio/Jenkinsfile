@@ -3,33 +3,24 @@ pipeline {
 
     environment {
         NODE_VERSION = '20'
-        APP_DIR = 'PremChanderJ-Portfolio' 
+        APP_DIR = 'PremChanderJ-Portfolio'
         PORT = '3001'
     }
 
-    triggers {
-        githubPush()
-    }
-
     stages {
-
         stage('Clone Repository') {
             steps {
-                git branch: 'lab2/Lab2', url: 'https://github.com/jpremchander/PROG8860-S25-CICD.git'
+                git branch: 'lab2', url: 'https://github.com/jpremchander/PROG8860-S25-CICD.git'
             }
         }
 
         stage('Install NodeJS') {
             steps {
                 script {
-                    sh '''
-                        if ! command -v node > /dev/null; then
-                            curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | sudo -E bash -
-                            sudo apt-get install -y nodejs
-                        fi
-                        node -v
-                        npm -v
-                    '''
+                    def nodeHome = tool name: "nodejs-${NODE_VERSION}", type: 'NodeJSInstallation'
+                    env.PATH = "${nodeHome}/bin:${env.PATH}"
+                    sh 'node --version'
+                    sh 'npm --version'
                 }
             }
         }
@@ -45,10 +36,8 @@ pipeline {
         stage('Lint & Type Check') {
             steps {
                 dir("${APP_DIR}") {
-                    sh '''
-                        npm run lint || true
-                        npm run type-check || true
-                    '''
+                    sh 'npm run lint'
+                    sh 'npm run type-check'
                 }
             }
         }
@@ -63,23 +52,18 @@ pipeline {
 
         stage('Stop Previous Instance (if running)') {
             steps {
-                script {
-                    sh '''
-                        PID=$(lsof -t -i:${PORT}) || true
-                        if [ ! -z "$PID" ]; then
-                            kill -9 $PID
-                        fi
-                    '''
-                }
+                sh '''
+                if lsof -Pi :${PORT} -sTCP:LISTEN -t >/dev/null ; then
+                  kill $(lsof -t -i:${PORT})
+                fi
+                '''
             }
         }
 
         stage('Deploy Locally') {
             steps {
                 dir("${APP_DIR}") {
-                    sh '''
-                        nohup npm run start -- -p ${PORT} > nextjs.log 2>&1 &
-                    '''
+                    sh "nohup npm run start -- -p ${PORT} > ../app.log 2>&1 &"
                 }
             }
         }

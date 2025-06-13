@@ -86,16 +86,7 @@ Port 3001 available for local app deployment testing (modifiable in Jenkinsfile)
 
 In this project, **Webhook approach** was chosen for efficient and real-time build triggering.
 
-## Troubleshooting & Issues Faced
-Git not found: Configure correct Git installation path in Jenkins global tools.
 
-Node version issues: Confirm Node.js version installed on Jenkins node matches pipeline requirements.
-
-Port 3001 busy: Change port in Jenkinsfile or free up port.
-
-Permission errors: Ensure Jenkins user has permission to run commands and access workspace.
-
-Pipeline stuck: Check Jenkins logs for errors, ensure network connectivity.
 
 ## Jenkins Build - Stage View
 

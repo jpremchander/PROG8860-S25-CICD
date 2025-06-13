@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test": "echo \"Running dummy tests... (no real tests yet)\""
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",

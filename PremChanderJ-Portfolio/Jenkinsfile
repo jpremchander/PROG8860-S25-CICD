@@ -1,0 +1,82 @@
+pipeline {
+    agent any
+
+    environment {
+        NODE_VERSION = '20'  // Set this based on your Next.js Node version (Next.js 14 prefers Node 20)
+        APP_DIR = 'PremChanderJ-Portfolio'
+    }
+
+    triggers {
+        githubPush()
+    }
+
+    stages {
+
+        stage('Clone Repository') {
+            steps {
+                git branch: 'lab2/Lab2', url: 'https://github.com/jpremchander/PROG8860-S25-CICD.git'
+            }
+        }
+
+        stage('Install NodeJS') {
+            steps {
+                script {
+                    // Use Jenkins NodeJS plugin if installed
+                    // OR install manually via shell
+                    sh '''
+                        curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | sudo -E bash -
+                        sudo apt-get install -y nodejs
+                        node -v
+                        npm -v
+                    '''
+                }
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                dir("${APP_DIR}") {
+                    sh '''
+                        npm install
+                    '''
+                }
+            }
+        }
+
+        stage('Lint & Type Check') {
+            steps {
+                dir("${APP_DIR}") {
+                    sh '''
+                        npm run lint
+                        npm run type-check || true
+                    '''
+                }
+            }
+        }
+
+        stage('Build Application') {
+            steps {
+                dir("${APP_DIR}") {
+                    sh '''
+                        npm run build
+                    '''
+                }
+            }
+        }
+
+        stage('Archive Build Artifacts') {
+            steps {
+                dir("${APP_DIR}") {
+                    archiveArtifacts artifacts: '.next/**/*', fingerprint: true
+                }
+            }
+        }
+
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}

@@ -27,6 +27,14 @@ pipeline {
             }
         }
 
+        stage('Install Dependencies') {
+            steps {
+                dir('PremChanderJ-Portfolio') {
+                sh 'npm ci'
+                }
+            }
+        }
+
         stage('Lint & Type Check') {
             steps {
                 dir("${APP_DIR}") {

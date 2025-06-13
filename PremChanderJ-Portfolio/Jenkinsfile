@@ -27,7 +27,7 @@ pipeline {
             }
         }
 
-        stage('Install Dependencies') {
+        stage('Install npm ci Dependencies') {
             steps {
                 dir('PremChanderJ-Portfolio') {
                     sh 'npm ci' // Use 'npm ci' for a clean install

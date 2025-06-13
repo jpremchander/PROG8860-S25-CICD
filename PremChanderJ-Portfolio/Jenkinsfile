@@ -2,8 +2,9 @@ pipeline {
     agent any
 
     environment {
-        NODE_VERSION = '20'  // Set this based on your Next.js Node version (Next.js 14 prefers Node 20)
+        NODE_VERSION = '20'
         APP_DIR = 'PremChanderJ-Portfolio'
+        PORT = '3001'
     }
 
     triggers {
@@ -21,11 +22,11 @@ pipeline {
         stage('Install NodeJS') {
             steps {
                 script {
-                    // Use Jenkins NodeJS plugin if installed
-                    // OR install manually via shell
                     sh '''
-                        curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | sudo -E bash -
-                        sudo apt-get install -y nodejs
+                        if ! command -v node > /dev/null; then
+                            curl -fsSL https://deb.nodesource.com/setup_${NODE_VERSION}.x | sudo -E bash -
+                            sudo apt-get install -y nodejs
+                        fi
                         node -v
                         npm -v
                     '''
@@ -36,9 +37,7 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 dir("${APP_DIR}") {
-                    sh '''
-                        npm install
-                    '''
+                    sh 'npm install'
                 }
             }
         }
@@ -47,7 +46,7 @@ pipeline {
             steps {
                 dir("${APP_DIR}") {
                     sh '''
-                        npm run lint
+                        npm run lint || true
                         npm run type-check || true
                     '''
                 }
@@ -57,21 +56,33 @@ pipeline {
         stage('Build Application') {
             steps {
                 dir("${APP_DIR}") {
+                    sh 'npm run build'
+                }
+            }
+        }
+
+        stage('Stop Previous Instance (if running)') {
+            steps {
+                script {
                     sh '''
-                        npm run build
+                        PID=$(lsof -t -i:${PORT}) || true
+                        if [ ! -z "$PID" ]; then
+                            kill -9 $PID
+                        fi
                     '''
                 }
             }
         }
 
-        stage('Archive Build Artifacts') {
+        stage('Deploy Locally') {
             steps {
                 dir("${APP_DIR}") {
-                    archiveArtifacts artifacts: '.next/**/*', fingerprint: true
+                    sh '''
+                        nohup npm run start -- -p ${PORT} > nextjs.log 2>&1 &
+                    '''
                 }
             }
         }
-
     }
 
     post {

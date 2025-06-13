@@ -22,7 +22,7 @@ pipeline {
                 dir("${APP_DIR}") {
                     sh 'node --version'
                     sh 'npm --version'
-                    sh 'npm install'
+                    sh 'npm install -legacy-peer-deps'
                 }
             }
         }

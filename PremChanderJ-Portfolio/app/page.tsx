@@ -58,7 +58,7 @@ export default function Home() {
       setName("")
       setEmail("")
       setMessage("")
-    } catch (error) {
+    } catch (_) {
       toast({
         title: "Something went wrong",
         description: "Your message couldn't be sent. Please try again.",
@@ -158,7 +158,7 @@ export default function Home() {
             <div className="flex flex-col md:flex-row items-center gap-8 md:gap-16">
               <div className="flex-1 space-y-6">
                 <h1 className="text-4xl md:text-6xl font-bold leading-tight">
-                  Hi, I'm <span className="gradient-text">Prem Chander J</span>
+                  Hi, I&apos;m <span className="gradient-text">Prem Chander J</span>
                 </h1>
                 <h2 className="text-2xl md:text-3xl font-medium text-muted-foreground">Platform Engineer</h2>
                 <p className="text-lg text-muted-foreground max-w-xl">
@@ -188,7 +188,7 @@ export default function Home() {
 
               <div className="space-y-6">
                 <p className="text-lg">
-                  I'm a Platform Engineer with extensive experience in cloud infrastructure, DevOps practices, and
+                  I&apos;m a Platform Engineer with extensive experience in cloud infrastructure, DevOps practices, and
                   monitoring solutions. My expertise spans across AWS, Azure, and Huawei Cloud platforms, with a focus
                   on automation, optimization, and security.
                 </p>

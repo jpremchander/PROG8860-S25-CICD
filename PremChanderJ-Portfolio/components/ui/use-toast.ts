@@ -23,7 +23,13 @@ const actionTypes = {
   UPDATE_TOAST: "UPDATE_TOAST",
   DISMISS_TOAST: "DISMISS_TOAST",
   REMOVE_TOAST: "REMOVE_TOAST",
-} as const
+} as const;
+
+// Type for the keys (e.g. "ADD_TOAST" | "UPDATE_TOAST" | ...)
+type ActionTypeKeys = keyof typeof actionTypes;
+
+// Type for the values (e.g. "ADD_TOAST" | "UPDATE_TOAST" | ...)
+type ActionTypeValues = (typeof actionTypes)[keyof typeof actionTypes];
 
 let count = 0
 

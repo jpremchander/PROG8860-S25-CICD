@@ -37,7 +37,7 @@ const toastVariants = cva(
   },
 )
 
-type ToastVariants = VariantProps<typeof toastVariants>
+export type ToastVariants = VariantProps<typeof toastVariants>
 
 const Toast = React.forwardRef<
   React.ElementRef<typeof ToastPrimitives.Root>,

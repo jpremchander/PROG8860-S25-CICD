@@ -30,7 +30,7 @@ pipeline {
         stage('Install Dependencies') {
             steps {
                 dir('PremChanderJ-Portfolio') {
-                sh 'npm ci'
+                    sh 'npm ci' // Use 'npm ci' for a clean install
                 }
             }
         }

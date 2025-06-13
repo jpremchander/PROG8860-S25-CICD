@@ -4,6 +4,36 @@
 
 This project demonstrates the integration of GitHub and Jenkins for CI/CD automation of a Next.js-based portfolio project.
 
+## File Structure
+
+/PROG8860-S25-CICD
+├── Jenkinsfile               # Jenkins pipeline script
+├── PremChanderJ-Portfolio    # Next.js app root folder
+│   ├── pages                 # Next.js pages
+│   ├── public                # Static assets
+│   ├── styles                # CSS/SCSS files
+│   ├── package.json          # NPM dependencies and scripts
+│   ├── next.config.js        # Next.js configuration
+│   └── ...
+├── README.md                 # This file
+├── .gitignore
+└── ...
+
+## Prerequisites
+Jenkins installed (v2.0+ recommended)
+
+Git installed on Jenkins server
+
+Node.js (v16 or above) installed on Jenkins server
+
+NPM or Yarn available on Jenkins server
+
+Jenkins plugins: Git Plugin, Pipeline Plugin
+
+Access to this GitHub repository
+
+Port 3001 available for local app deployment testing (modifiable in Jenkinsfile) 
+
 ## Technologies Used
 
 - Next.js (Frontend)
@@ -56,13 +86,25 @@ This project demonstrates the integration of GitHub and Jenkins for CI/CD automa
 
 In this project, **Webhook approach** was chosen for efficient and real-time build triggering.
 
-## Screenshots
+## Troubleshooting & Issues Faced
+Git not found: Configure correct Git installation path in Jenkins global tools.
 
-*(Attach Jenkins Pipeline configuration screenshots here)*
+Node version issues: Confirm Node.js version installed on Jenkins node matches pipeline requirements.
 
-## Build Logs
+Port 3001 busy: Change port in Jenkinsfile or free up port.
 
-*(Attach successful Jenkins build logs here)*
+Permission errors: Ensure Jenkins user has permission to run commands and access workspace.
+
+Pipeline stuck: Check Jenkins logs for errors, ensure network connectivity.
+
+## Jenkins Build - Stage View
+
+![alt text](image-2.png)
+
+
+## localhost: Portfolio
+
+![alt text](image.png)
 
 ## Author
 

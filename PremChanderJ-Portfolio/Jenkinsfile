@@ -1,8 +1,11 @@
 pipeline {
     agent any
 
+    tools {
+        nodejs 'NodeJS-24.2.0'  // <-- Replace this with your actual NodeJS tool name
+    }
+
     environment {
-        NODE_VERSION = '24.2.0'
         APP_DIR = 'PremChanderJ-Portfolio'
         PORT = '3001'
     }
@@ -14,21 +17,11 @@ pipeline {
             }
         }
 
-        stage('Install NodeJS') {
-            steps {
-                script {
-                    def nodeHome = tool name: "NodeJS-${NODE_VERSION}", type: 'NodeJSInstallation'
-//                    def nodeHome = tool name: "NodeJS-${NODE_VERSION}", type: 'NodeJSInstallation'
-                    env.PATH = "${nodeHome}/bin:${env.PATH}"
-                    sh 'node --version'
-                    sh 'npm --version'
-                }
-            }
-        }
-
         stage('Install Dependencies') {
             steps {
                 dir("${APP_DIR}") {
+                    sh 'node --version'
+                    sh 'npm --version'
                     sh 'npm install'
                 }
             }
@@ -38,7 +31,7 @@ pipeline {
             steps {
                 dir("${APP_DIR}") {
                     sh 'npm run lint'
-                    // Adjust type-check if you have a script; otherwise skip or add your own command
+                    // add your type check script here if needed
                 }
             }
         }
@@ -61,7 +54,6 @@ pipeline {
 
         stage('Install Serve Globally') {
             steps {
-                // Install 'serve' globally to serve the React production build
                 sh 'npm install -g serve'
             }
         }
@@ -79,7 +71,6 @@ pipeline {
         stage('Deploy Application') {
             steps {
                 dir("${APP_DIR}") {
-                    // Serve the 'build' folder on the given port in the background, logs to app.log
                     sh "nohup serve -s build -l ${PORT} > ../app.log 2>&1 &"
                 }
             }

@@ -17,7 +17,7 @@ pipeline {
         stage('Install NodeJS') {
             steps {
                 script {
-                    def nodeHome = tool name: "nodejs-${NODE_VERSION}", type: 'NodeJSInstallation'
+                    def nodeHome = tool name: "NodeJS-${NODE_VERSION}", type: 'NodeJSInstallation'
                     env.PATH = "${nodeHome}/bin:${env.PATH}"
                     sh 'node --version'
                     sh 'npm --version'

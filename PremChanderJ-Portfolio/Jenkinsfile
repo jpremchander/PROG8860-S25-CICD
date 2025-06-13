@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        NODE_VERSION = '24.2.0'
+        NODE_VERSION = '24.2.0' // Specify the Node.js version to use
         APP_DIR = 'PremChanderJ-Portfolio'
         PORT = '3001'
     }

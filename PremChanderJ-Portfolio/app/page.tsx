@@ -58,7 +58,7 @@ export default function Home() {
       setName("")
       setEmail("")
       setMessage("")
-    } catch (_) {
+    } catch {
       toast({
         title: "Something went wrong",
         description: "Your message couldn't be sent. Please try again.",

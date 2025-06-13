@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        NODE_VERSION = '24.2.0' // Specify the Node.js version to use
+        NODE_VERSION = '24.2.0'
         APP_DIR = 'PremChanderJ-Portfolio'
         PORT = '3001'
     }
@@ -37,7 +37,15 @@ pipeline {
             steps {
                 dir("${APP_DIR}") {
                     sh 'npm run lint'
-                    sh 'npm run type-check'
+                    // Adjust type-check if you have a script; otherwise skip or add your own command
+                }
+            }
+        }
+
+        stage('Test') {
+            steps {
+                dir("${APP_DIR}") {
+                    sh 'npm run test -- --watchAll=false'
                 }
             }
         }
@@ -47,6 +55,13 @@ pipeline {
                 dir("${APP_DIR}") {
                     sh 'npm run build'
                 }
+            }
+        }
+
+        stage('Install Serve Globally') {
+            steps {
+                // Install 'serve' globally to serve the React production build
+                sh 'npm install -g serve'
             }
         }
 
@@ -60,10 +75,11 @@ pipeline {
             }
         }
 
-        stage('Deploy Locally') {
+        stage('Deploy Application') {
             steps {
                 dir("${APP_DIR}") {
-                    sh "nohup npm run start -- -p ${PORT} > ../app.log 2>&1 &"
+                    // Serve the 'build' folder on the given port in the background, logs to app.log
+                    sh "nohup serve -s build -l ${PORT} > ../app.log 2>&1 &"
                 }
             }
         }

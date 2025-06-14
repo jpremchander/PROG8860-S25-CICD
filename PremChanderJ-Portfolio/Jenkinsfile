@@ -1,0 +1,93 @@
+pipeline {
+    agent any
+
+    tools {
+        nodejs 'NodeJS'  // <-- Replace this with your actual NodeJS tool name
+    }
+
+    environment {
+        APP_DIR = 'PremChanderJ-Portfolio'
+        PORT = '3001'
+    }
+
+    stages {
+        stage('Clone Repository') {
+            steps {
+                git branch: 'lab2', url: 'https://github.com/jpremchander/PROG8860-S25-CICD.git'
+            }
+        }
+
+        stage('Install Dependencies') {
+            steps {
+                dir("${APP_DIR}") {
+                    sh 'node --version'
+                    sh 'npm --version'
+                    sh 'npm install -legacy-peer-deps'
+                }
+            }
+        }
+
+        stage('Install npm ci Dependencies') {
+            steps {
+                dir('PremChanderJ-Portfolio') {
+                    sh 'npm ci' // Use 'npm ci' for a clean install
+                }
+            }
+        }
+
+        stage('Lint & Type Check') {
+            steps {
+                dir("${APP_DIR}") {
+                    sh 'npm run lint'
+                    // add your type check script here if needed
+                }
+            }
+        }
+
+        stage('Test') {
+            steps {
+                dir("${APP_DIR}") {
+                    sh 'npm run test -- --watchAll=false'
+                }
+            }
+        }
+
+        stage('Build Application') {
+            steps {
+                dir("${APP_DIR}") {
+                    sh 'npm run build'
+                }
+            }
+        }
+
+        stage('Install Serve Globally') {
+            steps {
+                sh 'npm install -g serve'
+            }
+        }
+
+        stage('Stop Previous Instance (if running)') {
+            steps {
+                sh '''
+                if lsof -Pi :${PORT} -sTCP:LISTEN -t >/dev/null ; then
+                  kill $(lsof -t -i:${PORT})
+                fi
+                '''
+            }
+        }
+
+        stage('Deploy Application') {
+            steps {
+                dir("${APP_DIR}") {
+                    sh "nohup serve -s build -l ${PORT} > ../app.log 2>&1 &"
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            cleanWs()
+        }
+    }
+}

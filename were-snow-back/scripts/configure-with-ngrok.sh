@@ -47,6 +47,9 @@ if [ -z "$JENKINS_CRUMB" ]; then
 fi
 
 echo "✅ Jenkins authentication successful"
+# Fix CSRF token issue
+echo "🔧 Configuring CSRF protection..."
+echo "JENKINS_CRUMB=$JENKINS_CRUMB" >> .jenkins-config
 
 # Create GitHub webhook
 echo "📡 Creating GitHub webhook..."
@@ -80,6 +83,14 @@ else
     echo "💡 Check your GitHub token permissions"
 fi
 
+# Extract webhook ID properly
+if echo "$WEBHOOK_RESPONSE" | grep -q '"id"'; then
+    WEBHOOK_ID=$(echo "$WEBHOOK_RESPONSE" | grep -o '"id":[0-9]*' | cut -d':' -f2)
+    echo "WEBHOOK_ID=$WEBHOOK_ID" >> .jenkins-config
+else
+    echo "WEBHOOK_ID=" >> .jenkins-config
+fi
+
 # Save configuration
 cat > .jenkins-config << EOF
 JENKINS_URL=$JENKINS_URL
@@ -111,3 +122,72 @@ echo "🌐 Jenkins: $JENKINS_URL"
 echo "🔗 Webhook: $WEBHOOK_URL"
 echo "📋 Next: Create pipeline job"
 echo "================================================"
+
+# Check and create missing project files
+echo "🔍 Checking project structure..."
+if [ ! -f "package.json" ]; then
+    echo "📦 Creating package.json..."
+    cat > package.json << 'EOF'
+{
+  "name": "snowbored-game",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "jest --passWithNoTests",
+    "test:coverage": "jest --coverage --passWithNoTests"
+  },
+  "dependencies": {
+    "next": "14.0.0",
+    "react": "^18",
+    "react-dom": "^18"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^18",
+    "eslint": "^8",
+    "eslint-config-next": "14.0.0",
+    "typescript": "^5",
+    "jest": "^29.7.0"
+  }
+}
+EOF
+    echo "✅ package.json created"
+fi
+
+if [ ! -f "Dockerfile" ]; then
+    echo "🐳 Creating Dockerfile..."
+    cat > Dockerfile << 'EOF'
+FROM node:18-alpine AS base
+WORKDIR /app
+COPY package*.json ./
+
+FROM base AS deps
+RUN npm ci --only=production
+
+FROM base AS build
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM node:18-alpine AS runtime
+WORKDIR /app
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+COPY --from=build --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=build --chown=nextjs:nodejs /app/.next/static ./.next/static
+COPY --from=build --chown=nextjs:nodejs /app/public ./public
+USER nextjs
+EXPOSE 3000
+ENV PORT 3000
+CMD ["node", "server.js"]
+EOF
+    echo "✅ Dockerfile created"
+fi
+
+echo "📦 Installing dependencies..."
+npm install
+echo "✅ Dependencies installed"

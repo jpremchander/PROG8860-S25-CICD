@@ -189,5 +189,9 @@ EOF
 fi
 
 echo "📦 Installing dependencies..."
-npm install
-echo "✅ Dependencies installed"
+npm install --legacy-peer-deps
+if [ $? -eq 0 ]; then
+    echo "✅ Dependencies installed successfully"
+else
+    echo "⚠️  Dependency installation had issues, but continuing..."
+fi

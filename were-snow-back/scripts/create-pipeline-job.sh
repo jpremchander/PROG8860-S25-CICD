@@ -70,37 +70,68 @@ cat > /tmp/snowbored-job.xml << EOF
 </flow-definition>
 EOF
 
-# Get Jenkins crumb
-JENKINS_CRUMB=$(curl -s "$JENKINS_URL/crumbIssuer/api/xml?xpath=concat(//crumbRequestField,\":\",//crumb)" \
+# Get Jenkins crumb with proper format
+echo "🔐 Getting CSRF token..."
+CRUMB_RESPONSE=$(curl -s "$JENKINS_URL/crumbIssuer/api/json" \
   --user "$JENKINS_USER:$JENKINS_PASSWORD" \
   -H "ngrok-skip-browser-warning: true")
 
-# Create the job
-echo "🏗️ Creating pipeline job '$JOB_NAME'..."
-CREATE_RESPONSE=$(curl -s -X POST "$JENKINS_URL/createItem?name=$JOB_NAME" \
-  --user "$JENKINS_USER:$JENKINS_PASSWORD" \
-  -H "$JENKINS_CRUMB" \
-  -H "Content-Type: application/xml" \
-  -H "ngrok-skip-browser-warning: true" \
-  --data-binary @/tmp/snowbored-job.xml)
+if [ -z "$CRUMB_RESPONSE" ]; then
+    echo "❌ Failed to get crumb response"
+    exit 1
+fi
 
-if [ $? -eq 0 ]; then
-    echo "✅ Pipeline job created successfully!"
-    echo "🌐 Job URL: $JENKINS_URL/job/$JOB_NAME/"
+# Extract crumb field and value properly
+CRUMB_FIELD=$(echo "$CRUMB_RESPONSE" | grep -o '"crumbRequestField":"[^"]*"' | cut -d'"' -f4)
+CRUMB_VALUE=$(echo "$CRUMB_RESPONSE" | grep -o '"crumb":"[^"]*"' | cut -d'"' -f4)
+
+if [ -z "$CRUMB_FIELD" ] || [ -z "$CRUMB_VALUE" ]; then
+    echo "❌ Failed to extract CSRF token"
+    exit 1
+fi
+
+echo "✅ CSRF token obtained: $CRUMB_FIELD"
+
+# Check if job already exists
+echo "🔍 Checking if job already exists..."
+JOB_CHECK=$(curl -s -w "%{http_code}" -o /dev/null \
+  --user "$JENKINS_USER:$JENKINS_PASSWORD" \
+  -H "ngrok-skip-browser-warning: true" \
+  "$JENKINS_URL/job/$JOB_NAME/api/json")
+
+if [ "$JOB_CHECK" = "200" ]; then
+    echo "⚠️  Job already exists. Updating configuration..."
     
-    # Trigger initial build
-    echo "🚀 Triggering initial build..."
-    sleep 2
-    curl -s -X POST "$JENKINS_URL/job/$JOB_NAME/build" \
+    # Update existing job
+    UPDATE_RESPONSE=$(curl -s -w "%{http_code}" -X POST \
+      "$JENKINS_URL/job/$JOB_NAME/config.xml" \
       --user "$JENKINS_USER:$JENKINS_PASSWORD" \
       -H "$JENKINS_CRUMB" \
-      -H "ngrok-skip-browser-warning: true"
+      -H "Content-Type: application/xml" \
+      -H "ngrok-skip-browser-warning: true" \
+      --data-binary @/tmp/snowbored-job.xml)
     
-    echo "✅ Initial build triggered!"
-    echo "📊 Monitor build: $JENKINS_URL/job/$JOB_NAME/"
+    if [[ "$UPDATE_RESPONSE" == *"200"* ]]; then
+        echo "✅ Pipeline job updated successfully!"
+    else
+        echo "⚠️  Update response: $UPDATE_RESPONSE"
+    fi
 else
-    echo "❌ Failed to create job"
-    echo "Response: $CREATE_RESPONSE"
+    # Create new job with proper CSRF header
+    echo "🏗️ Creating new pipeline job '$JOB_NAME'..."
+    CREATE_RESPONSE=$(curl -s -w "%{http_code}" -X POST \
+      "$JENKINS_URL/createItem?name=$JOB_NAME" \
+      --user "$JENKINS_USER:$JENKINS_PASSWORD" \
+      -H "$CRUMB_FIELD: $CRUMB_VALUE" \
+      -H "Content-Type: application/xml" \
+      -H "ngrok-skip-browser-warning: true" \
+      --data-binary @/tmp/snowbored-job.xml)
+
+    if [[ "$CREATE_RESPONSE" == *"200"* ]]; then
+        echo "✅ Pipeline job created successfully!"
+    else
+        echo "⚠️  Create response: $CREATE_RESPONSE"
+    fi
 fi
 
 # Clean up
@@ -112,3 +143,4 @@ echo "🌐 Jenkins Dashboard: $JENKINS_URL"
 echo "🏗️ Pipeline Job: $JENKINS_URL/job/$JOB_NAME/"
 echo "📊 Blue Ocean: $JENKINS_URL/blue/organizations/jenkins/$JOB_NAME/"
 echo "================================================"
+echo "🚀 Ready to trigger builds!"

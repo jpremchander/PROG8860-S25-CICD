@@ -4,6 +4,8 @@ A fun snowboarding game built with Next.js and TypeScript, featuring a complete 
 
 ## 🎮 Game Overview
 
+![alt text](image.png)
+
 SnowBored is an endless runner-style snowboarding game where players navigate through obstacles while skiing down a snowy slope. The game features:
 
 - Smooth player movement with gravity physics

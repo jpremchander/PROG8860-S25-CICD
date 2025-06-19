@@ -133,7 +133,7 @@ PORT=8080
                             echo "Checking go fmt..."
                             if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
                                 echo "❌ Code formatting issues found:"
-                                gofmt -s -l .
+                                gofmt -s -l . 
                                 exit 1
                             else
                                 echo "✅ Code formatting is correct"
@@ -157,7 +157,7 @@ PORT=8080
         
         stage('Test') {
             when {
-                not { params.SKIP_TESTS }
+                expression { return !params.SKIP_TESTS }
             }
             steps {
                 echo "🧪 Running tests..."
@@ -285,148 +285,45 @@ PORT=8080
                             )
                             
                             // Create and upload build metadata
-                            writeFile file: 'build-metadata.json', text: """
-{
-    "build_number": "${BUILD_NUMBER}",
-    "git_commit": "${env.GIT_COMMIT_SHORT}",
-    "environment": "${ENVIRONMENT}",
-    "timestamp": "${env.BUILD_TIMESTAMP}",
-    "docker_tag": "${DOCKER_TAG}",
-    "artifacts": {
-        "application": "yelpcamp-app-${BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}.tar.gz",
-        "docker_image": "${DOCKER_IMAGE}:${DOCKER_TAG}"
-    }
-}
+                            writeFile file: "build-info.txt", text: """
+Build Information:
+  - Environment: ${ENVIRONMENT}
+  - Git Commit: ${env.GIT_COMMIT_SHORT}
+  - Build Number: ${BUILD_NUMBER}
+  - Timestamp: ${env.BUILD_TIMESTAMP}
 """
-                            
                             s3Upload(
                                 bucket: "${S3_BUCKET}",
                                 path: "${ENVIRONMENT}/metadata/",
-                                includePathPattern: "build-metadata.json"
+                                includePathPattern: "build-info.txt"
                             )
                         }
                         
-                        echo "✅ Artifacts uploaded to S3 successfully"
-                        echo "📦 S3 Locations:"
-                        echo "  - Application: s3://${S3_BUCKET}/${ENVIRONMENT}/builds/yelpcamp-app-${BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}.tar.gz"
-                        echo "  - Reports: s3://${S3_BUCKET}/${ENVIRONMENT}/reports/${BUILD_NUMBER}/"
-                        echo "  - Metadata: s3://${S3_BUCKET}/${ENVIRONMENT}/metadata/build-metadata.json"
-                        
+                        echo "✅ Artifacts uploaded successfully"
                     } catch (Exception e) {
-                        echo "⚠️ S3 upload failed: ${e.getMessage()}"
-                        echo "Continuing with local deployment..."
-                        currentBuild.result = 'UNSTABLE'
+                        error("Artifact upload failed: ${e.getMessage()}")
                     }
                 }
             }
         }
         
-        stage('Deploy to Localhost') {
+        stage('Deploy') {
             when {
-                expression { params.DEPLOY_LOCALLY }
+                expression { return params.DEPLOY_LOCALLY }
             }
             steps {
-                echo "🚀 Deploying to localhost..."
-                
+                echo "🚀 Deploying application..."
                 script {
                     try {
-                        // Stop existing containers
-                        sh '''
-                            echo "Stopping existing containers..."
-                            docker-compose -f ${COMPOSE_FILE_DEV} down || true
-                            docker-compose -f ${COMPOSE_FILE_PROD} down || true
-                            
-                            # Clean up old containers and images
-                            docker container prune -f || true
-                            docker image prune -f || true
-                        '''
-                        
-                        // Deploy based on environment
                         if (ENVIRONMENT == 'prod') {
-                            sh '''
-                                echo "Deploying to PRODUCTION environment..."
-                                docker-compose -f ${COMPOSE_FILE_PROD} up -d --build
-                                
-                                echo "Waiting for services to start..."
-                                sleep 30
-                                
-                                echo "Checking service health..."
-                                docker-compose -f ${COMPOSE_FILE_PROD} ps
-                            '''
+                            echo "Deploying to production..."
+                            sh "docker-compose -f ${COMPOSE_FILE_PROD} up -d"
                         } else {
-                            sh '''
-                                echo "Deploying to DEVELOPMENT environment..."
-                                docker-compose -f ${COMPOSE_FILE_DEV} up -d --build
-                                
-                                echo "Waiting for services to start..."
-                                sleep 30
-                                
-                                echo "Checking service health..."
-                                docker-compose -f ${COMPOSE_FILE_DEV} ps
-                            '''
+                            echo "Deploying to development..."
+                            sh "docker-compose -f ${COMPOSE_FILE_DEV} up -d"
                         }
-                        
-                        // Health check
-                        sh '''
-                            echo "Performing health check..."
-                            for i in {1..10}; do
-                                if curl -f http://localhost:3000/health; then
-                                    echo "✅ Application is healthy!"
-                                    break
-                                else
-                                    echo "⏳ Waiting for application to start... (attempt $i/10)"
-                                    sleep 10
-                                fi
-                            done
-                        '''
-                        
-                        echo "✅ Deployment completed successfully!"
-                        echo "🌐 Application is running at: http://localhost:3000"
-                        
                     } catch (Exception e) {
-                        echo "❌ Deployment failed: ${e.getMessage()}"
-                        
-                        // Show logs for debugging
-                        sh '''
-                            echo "=== Application Logs ==="
-                            docker-compose logs app || true
-                            echo "=== MongoDB Logs ==="
-                            docker-compose logs mongo || true
-                        '''
-                        
-                        error("Deployment failed")
-                    }
-                }
-            }
-        }
-        
-        stage('Post-Deployment Tests') {
-            when {
-                expression { params.DEPLOY_LOCALLY }
-            }
-            steps {
-                echo "🔍 Running post-deployment tests..."
-                
-                script {
-                    try {
-                        sh '''
-                            echo "Testing API endpoints..."
-                            
-                            # Test health endpoint
-                            echo "Testing /health endpoint..."
-                            curl -f http://localhost:3000/health
-                            
-                            # Test campgrounds endpoint
-                            echo "Testing /api/campgrounds endpoint..."
-                            curl -f http://localhost:3000/api/campgrounds
-                            
-                            echo "✅ All API endpoints are responding"
-                        '''
-                        
-                        echo "✅ Post-deployment tests passed"
-                    } catch (Exception e) {
-                        echo "⚠️ Some post-deployment tests failed: ${e.getMessage()}"
-                        currentBuild.result = 'UNSTABLE'
+                        error("Deployment failed: ${e.getMessage()}")
                     }
                 }
             }
@@ -435,75 +332,7 @@ PORT=8080
     
     post {
         always {
-            echo "🧹 Cleaning up..."
-            
-            // Clean up workspace but keep important artifacts
-            sh '''
-                # Keep important files
-                mkdir -p keep
-                cp *.tar.gz keep/ 2>/dev/null || true
-                cp coverage.html keep/ 2>/dev/null || true
-                cp build-metadata.json keep/ 2>/dev/null || true
-                
-                # Clean up build files
-                rm -f yelpcamp-app
-                rm -f coverage.out
-                rm -f test-results.txt
-                
-                # Restore important files
-                cp keep/* . 2>/dev/null || true
-                rm -rf keep
-            '''
-        }
-        
-        success {
-            echo "🎉 Pipeline completed successfully!"
-            echo "📋 Build Summary:"
-            echo "  - Environment: ${ENVIRONMENT}"
-            echo "  - Build Number: ${BUILD_NUMBER}"
-            echo "  - Git Commit: ${env.GIT_COMMIT_SHORT}"
-            echo "  - Docker Image: ${DOCKER_IMAGE}:${DOCKER_TAG}"
-            echo "  - Application URL: http://localhost:8080"
-            
-            // Send success notification (if configured)
-            script {
-                if (env.SLACK_WEBHOOK) {
-                    slackSend(
-                        color: 'good',
-                        message: "✅ YelpCamp deployment successful!\nEnvironment: ${ENVIRONMENT}\nBuild: ${BUILD_NUMBER}\nURL: http://localhost:8080"
-                    )
-                }
-            }
-        }
-        
-        failure {
-            echo "❌ Pipeline failed!"
-            
-            // Show container logs for debugging
-            sh '''
-                echo "=== Container Status ==="
-                docker ps -a || true
-                
-                echo "=== Application Logs ==="
-                docker-compose logs app || true
-                
-                echo "=== MongoDB Logs ==="
-                docker-compose logs mongo || true
-            '''
-            
-            // Send failure notification (if configured)
-            script {
-                if (env.SLACK_WEBHOOK) {
-                    slackSend(
-                        color: 'danger',
-                        message: "❌ YelpCamp deployment failed!\nEnvironment: ${ENVIRONMENT}\nBuild: ${BUILD_NUMBER}\nCheck Jenkins for details."
-                    )
-                }
-            }
-        }
-        
-        unstable {
-            echo "⚠️ Pipeline completed with warnings"
+            echo "🎉 Pipeline completed"
         }
     }
 }

@@ -1,0 +1,46 @@
+package routes
+
+import (
+	"github.com/gin-gonic/gin"
+	"campgrounds-app/controllers"
+	"campgrounds-app/middleware"
+)
+
+func SetupRoutes(r *gin.Engine) {
+	// Initialize controllers
+	authController := controllers.NewAuthController()
+	campgroundController := controllers.NewCampgroundController()
+	reviewController := controllers.NewReviewController()
+
+	// API routes
+	api := r.Group("/api")
+	{
+		// Auth routes
+		auth := api.Group("/auth")
+		{
+			auth.POST("/register", authController.Register)
+			auth.POST("/login", authController.Login)
+		}
+
+		// Campground routes
+		campgrounds := api.Group("/campgrounds")
+		{
+			campgrounds.GET("", campgroundController.GetAll)
+			campgrounds.GET("/:id", campgroundController.GetByID)
+			
+			// Protected routes
+			campgrounds.POST("", middleware.AuthRequired(), campgroundController.Create)
+			campgrounds.PUT("/:id", middleware.AuthRequired(), campgroundController.Update)
+			campgrounds.DELETE("/:id", middleware.AuthRequired(), campgroundController.Delete)
+			
+			// Review routes
+			campgrounds.POST("/:id/reviews", middleware.AuthRequired(), reviewController.Create)
+			campgrounds.DELETE("/:id/reviews/:reviewId", middleware.AuthRequired(), reviewController.Delete)
+		}
+	}
+
+	// Health check
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "ok"})
+	})
+}

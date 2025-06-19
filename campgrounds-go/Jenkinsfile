@@ -1,0 +1,509 @@
+pipeline {
+    agent any
+    
+    environment {
+        // Application settings
+        APP_NAME = 'yelpcamp-go'
+        DOCKER_IMAGE = 'yelpcamp-go'
+        DOCKER_TAG = "${BUILD_NUMBER}"
+        
+        // AWS S3 settings
+        S3_BUCKET = 'yelpcamp-artifacts-bucket'
+        AWS_REGION = 'us-east-1'
+        IAM_ROLE = 'arn:aws:iam::054037100649:role/yelpcamp-s3-role'
+        
+        // Docker Compose files
+        COMPOSE_FILE_DEV = 'docker-compose.dev.yml'
+        COMPOSE_FILE_PROD = 'docker-compose.prod.yml'
+        
+        // Environment specific settings
+        ENVIRONMENT = "${params.ENVIRONMENT ?: 'dev'}"
+    }
+    
+    parameters {
+        choice(
+            name: 'ENVIRONMENT',
+            choices: ['dev', 'prod'],
+            description: 'Deployment environment'
+        )
+        booleanParam(
+            name: 'SKIP_TESTS',
+            defaultValue: false,
+            description: 'Skip running tests'
+        )
+        booleanParam(
+            name: 'DEPLOY_LOCALLY',
+            defaultValue: true,
+            description: 'Deploy to localhost'
+        )
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                echo "🔄 Checking out code..."
+                checkout scm
+                
+                script {
+                    env.GIT_COMMIT_SHORT = sh(
+                        script: "git rev-parse --short HEAD",
+                        returnStdout: true
+                    ).trim()
+                    env.BUILD_TIMESTAMP = sh(
+                        script: "date +%Y%m%d-%H%M%S",
+                        returnStdout: true
+                    ).trim()
+                }
+                
+                echo "📋 Build Info:"
+                echo "  - Environment: ${ENVIRONMENT}"
+                echo "  - Git Commit: ${env.GIT_COMMIT_SHORT}"
+                echo "  - Build Number: ${BUILD_NUMBER}"
+                echo "  - Timestamp: ${env.BUILD_TIMESTAMP}"
+            }
+        }
+        
+        stage('Environment Setup') {
+            steps {
+                echo "🔧 Setting up environment..."
+                
+                script {
+                    // Create environment-specific .env file
+                    if (ENVIRONMENT == 'prod') {
+                        writeFile file: '.env', text: """
+# Production Environment
+GIN_MODE=release
+MONGO_HOST=mongo
+MONGO_PORT=27017
+MONGO_USER=yelpcamp_prod
+MONGO_PASSWORD=prod_secure_password_123
+MONGO_DATABASE=yelpcamp_prod
+JWT_SECRET=prod_jwt_super_secret_key_2024
+CLOUDINARY_CLOUD_NAME=dl0zvwr9i
+CLOUDINARY_API_KEY=719144713242759
+CLOUDINARY_API_SECRET=tCIGtTFz8vvEem2Vl1HuOd_7xhE
+PORT=8080
+"""
+                    } else {
+                        writeFile file: '.env', text: """
+# Development Environment
+GIN_MODE=debug
+MONGO_HOST=mongo
+MONGO_PORT=27017
+MONGO_USER=yelpcamp_dev
+MONGO_PASSWORD=dev_password_123
+MONGO_DATABASE=yelpcamp_dev
+JWT_SECRET=dev_jwt_secret_key_2024
+CLOUDINARY_CLOUD_NAME=dl0zvwr9i
+CLOUDINARY_API_KEY=719144713242759
+CLOUDINARY_API_SECRET=tCIGtTFz8vvEem2Vl1HuOd_7xhE
+PORT=8080
+"""
+                    }
+                }
+                
+                echo "✅ Environment configuration created for: ${ENVIRONMENT}"
+            }
+        }
+        
+        stage('Lint & Static Analysis') {
+            steps {
+                echo "🔍 Running lint and static analysis..."
+                
+                script {
+                    try {
+                        // Install golangci-lint if not present
+                        sh '''
+                            if ! command -v golangci-lint &> /dev/null; then
+                                echo "Installing golangci-lint..."
+                                curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.54.2
+                                export PATH=$PATH:$(go env GOPATH)/bin
+                            fi
+                        '''
+                        
+                        // Run linting
+                        sh '''
+                            export PATH=$PATH:$(go env GOPATH)/bin
+                            echo "Running golangci-lint..."
+                            golangci-lint run --timeout=5m --out-format=checkstyle > golangci-lint-report.xml || true
+                            
+                            echo "Running go vet..."
+                            go vet ./... || true
+                            
+                            echo "Checking go fmt..."
+                            if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+                                echo "❌ Code formatting issues found:"
+                                gofmt -s -l .
+                                exit 1
+                            else
+                                echo "✅ Code formatting is correct"
+                            fi
+                        '''
+                        
+                        echo "✅ Lint and static analysis completed"
+                    } catch (Exception e) {
+                        echo "⚠️ Lint issues found, but continuing..."
+                        currentBuild.result = 'UNSTABLE'
+                    }
+                }
+            }
+            post {
+                always {
+                    // Archive lint results
+                    archiveArtifacts artifacts: 'golangci-lint-report.xml', allowEmptyArchive: true
+                }
+            }
+        }
+        
+        stage('Test') {
+            when {
+                not { params.SKIP_TESTS }
+            }
+            steps {
+                echo "🧪 Running tests..."
+                
+                script {
+                    try {
+                        sh '''
+                            echo "Installing dependencies..."
+                            go mod download
+                            go mod tidy
+                            
+                            echo "Running tests with coverage..."
+                            go test -v -race -coverprofile=coverage.out ./... > test-results.txt 2>&1
+                            
+                            echo "Generating coverage report..."
+                            go tool cover -html=coverage.out -o coverage.html
+                            go tool cover -func=coverage.out > coverage-summary.txt
+                            
+                            echo "Test Coverage Summary:"
+                            cat coverage-summary.txt
+                        '''
+                        
+                        echo "✅ Tests completed successfully"
+                    } catch (Exception e) {
+                        echo "❌ Tests failed!"
+                        sh 'cat test-results.txt || true'
+                        error("Tests failed - stopping pipeline")
+                    }
+                }
+            }
+            post {
+                always {
+                    // Archive test results and coverage
+                    archiveArtifacts artifacts: 'coverage.out,coverage.html,coverage-summary.txt,test-results.txt', allowEmptyArchive: true
+                }
+            }
+        }
+        
+        stage('Build Application') {
+            steps {
+                echo "🏗️ Building Go application..."
+                
+                sh '''
+                    echo "Building Go binary..."
+                    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -a -installsuffix cgo -ldflags="-w -s" -o yelpcamp-app .
+                    
+                    echo "Verifying binary..."
+                    ls -la yelpcamp-app
+                    file yelpcamp-app
+                    
+                    echo "Creating application archive..."
+                    mkdir -p artifacts
+                    cp yelpcamp-app artifacts/
+                    cp -r templates artifacts/ 2>/dev/null || echo "No templates directory"
+                    cp -r public artifacts/ 2>/dev/null || echo "No public directory"
+                    cp docker-compose*.yml artifacts/
+                    cp Dockerfile* artifacts/
+                    cp .env artifacts/
+                    
+                    # Create versioned archive
+                    tar -czf yelpcamp-app-${BUILD_NUMBER}-${GIT_COMMIT_SHORT}.tar.gz -C artifacts .
+                    
+                    echo "Archive created: yelpcamp-app-${BUILD_NUMBER}-${GIT_COMMIT_SHORT}.tar.gz"
+                    ls -la *.tar.gz
+                '''
+                
+                echo "✅ Application build completed"
+            }
+            post {
+                always {
+                    archiveArtifacts artifacts: '*.tar.gz', fingerprint: true
+                }
+            }
+        }
+        
+        stage('Build Docker Images') {
+            steps {
+                echo "🐳 Building Docker images..."
+                
+                script {
+                    try {
+                        sh '''
+                            echo "Building application Docker image..."
+                            docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
+                            docker build -t ${DOCKER_IMAGE}:latest .
+                            
+                            # Tag for environment
+                            if [ "${ENVIRONMENT}" = "prod" ]; then
+                                docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:prod
+                            else
+                                docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:dev
+                            fi
+                            
+                            echo "Docker images built successfully:"
+                            docker images | grep ${DOCKER_IMAGE}
+                        '''
+                        
+                        echo "✅ Docker images built successfully"
+                    } catch (Exception e) {
+                        error("Docker build failed: ${e.getMessage()}")
+                    }
+                }
+            }
+        }
+        
+        stage('Upload Artifacts to S3') {
+            steps {
+                echo "☁️ Uploading artifacts to S3..."
+                
+                script {
+                    try {
+                        withAWS(role: "${IAM_ROLE}", region: "${AWS_REGION}") {
+                            // Upload application archive
+                            s3Upload(
+                                bucket: "${S3_BUCKET}",
+                                path: "${ENVIRONMENT}/builds/",
+                                includePathPattern: "yelpcamp-app-${BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}.tar.gz"
+                            )
+                            
+                            // Upload test results and coverage
+                            s3Upload(
+                                bucket: "${S3_BUCKET}",
+                                path: "${ENVIRONMENT}/reports/${BUILD_NUMBER}/",
+                                includePathPattern: "coverage.html,coverage-summary.txt,test-results.txt,golangci-lint-report.xml"
+                            )
+                            
+                            // Create and upload build metadata
+                            writeFile file: 'build-metadata.json', text: """
+{
+    "build_number": "${BUILD_NUMBER}",
+    "git_commit": "${env.GIT_COMMIT_SHORT}",
+    "environment": "${ENVIRONMENT}",
+    "timestamp": "${env.BUILD_TIMESTAMP}",
+    "docker_tag": "${DOCKER_TAG}",
+    "artifacts": {
+        "application": "yelpcamp-app-${BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}.tar.gz",
+        "docker_image": "${DOCKER_IMAGE}:${DOCKER_TAG}"
+    }
+}
+"""
+                            
+                            s3Upload(
+                                bucket: "${S3_BUCKET}",
+                                path: "${ENVIRONMENT}/metadata/",
+                                includePathPattern: "build-metadata.json"
+                            )
+                        }
+                        
+                        echo "✅ Artifacts uploaded to S3 successfully"
+                        echo "📦 S3 Locations:"
+                        echo "  - Application: s3://${S3_BUCKET}/${ENVIRONMENT}/builds/yelpcamp-app-${BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}.tar.gz"
+                        echo "  - Reports: s3://${S3_BUCKET}/${ENVIRONMENT}/reports/${BUILD_NUMBER}/"
+                        echo "  - Metadata: s3://${S3_BUCKET}/${ENVIRONMENT}/metadata/build-metadata.json"
+                        
+                    } catch (Exception e) {
+                        echo "⚠️ S3 upload failed: ${e.getMessage()}"
+                        echo "Continuing with local deployment..."
+                        currentBuild.result = 'UNSTABLE'
+                    }
+                }
+            }
+        }
+        
+        stage('Deploy to Localhost') {
+            when {
+                expression { params.DEPLOY_LOCALLY }
+            }
+            steps {
+                echo "🚀 Deploying to localhost..."
+                
+                script {
+                    try {
+                        // Stop existing containers
+                        sh '''
+                            echo "Stopping existing containers..."
+                            docker-compose -f ${COMPOSE_FILE_DEV} down || true
+                            docker-compose -f ${COMPOSE_FILE_PROD} down || true
+                            
+                            # Clean up old containers and images
+                            docker container prune -f || true
+                            docker image prune -f || true
+                        '''
+                        
+                        // Deploy based on environment
+                        if (ENVIRONMENT == 'prod') {
+                            sh '''
+                                echo "Deploying to PRODUCTION environment..."
+                                docker-compose -f ${COMPOSE_FILE_PROD} up -d --build
+                                
+                                echo "Waiting for services to start..."
+                                sleep 30
+                                
+                                echo "Checking service health..."
+                                docker-compose -f ${COMPOSE_FILE_PROD} ps
+                            '''
+                        } else {
+                            sh '''
+                                echo "Deploying to DEVELOPMENT environment..."
+                                docker-compose -f ${COMPOSE_FILE_DEV} up -d --build
+                                
+                                echo "Waiting for services to start..."
+                                sleep 30
+                                
+                                echo "Checking service health..."
+                                docker-compose -f ${COMPOSE_FILE_DEV} ps
+                            '''
+                        }
+                        
+                        // Health check
+                        sh '''
+                            echo "Performing health check..."
+                            for i in {1..10}; do
+                                if curl -f http://localhost:3000/health; then
+                                    echo "✅ Application is healthy!"
+                                    break
+                                else
+                                    echo "⏳ Waiting for application to start... (attempt $i/10)"
+                                    sleep 10
+                                fi
+                            done
+                        '''
+                        
+                        echo "✅ Deployment completed successfully!"
+                        echo "🌐 Application is running at: http://localhost:3000"
+                        
+                    } catch (Exception e) {
+                        echo "❌ Deployment failed: ${e.getMessage()}"
+                        
+                        // Show logs for debugging
+                        sh '''
+                            echo "=== Application Logs ==="
+                            docker-compose logs app || true
+                            echo "=== MongoDB Logs ==="
+                            docker-compose logs mongo || true
+                        '''
+                        
+                        error("Deployment failed")
+                    }
+                }
+            }
+        }
+        
+        stage('Post-Deployment Tests') {
+            when {
+                expression { params.DEPLOY_LOCALLY }
+            }
+            steps {
+                echo "🔍 Running post-deployment tests..."
+                
+                script {
+                    try {
+                        sh '''
+                            echo "Testing API endpoints..."
+                            
+                            # Test health endpoint
+                            echo "Testing /health endpoint..."
+                            curl -f http://localhost:3000/health
+                            
+                            # Test campgrounds endpoint
+                            echo "Testing /api/campgrounds endpoint..."
+                            curl -f http://localhost:3000/api/campgrounds
+                            
+                            echo "✅ All API endpoints are responding"
+                        '''
+                        
+                        echo "✅ Post-deployment tests passed"
+                    } catch (Exception e) {
+                        echo "⚠️ Some post-deployment tests failed: ${e.getMessage()}"
+                        currentBuild.result = 'UNSTABLE'
+                    }
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo "🧹 Cleaning up..."
+            
+            // Clean up workspace but keep important artifacts
+            sh '''
+                # Keep important files
+                mkdir -p keep
+                cp *.tar.gz keep/ 2>/dev/null || true
+                cp coverage.html keep/ 2>/dev/null || true
+                cp build-metadata.json keep/ 2>/dev/null || true
+                
+                # Clean up build files
+                rm -f yelpcamp-app
+                rm -f coverage.out
+                rm -f test-results.txt
+                
+                # Restore important files
+                cp keep/* . 2>/dev/null || true
+                rm -rf keep
+            '''
+        }
+        
+        success {
+            echo "🎉 Pipeline completed successfully!"
+            echo "📋 Build Summary:"
+            echo "  - Environment: ${ENVIRONMENT}"
+            echo "  - Build Number: ${BUILD_NUMBER}"
+            echo "  - Git Commit: ${env.GIT_COMMIT_SHORT}"
+            echo "  - Docker Image: ${DOCKER_IMAGE}:${DOCKER_TAG}"
+            echo "  - Application URL: http://localhost:8080"
+            
+            // Send success notification (if configured)
+            script {
+                if (env.SLACK_WEBHOOK) {
+                    slackSend(
+                        color: 'good',
+                        message: "✅ YelpCamp deployment successful!\nEnvironment: ${ENVIRONMENT}\nBuild: ${BUILD_NUMBER}\nURL: http://localhost:8080"
+                    )
+                }
+            }
+        }
+        
+        failure {
+            echo "❌ Pipeline failed!"
+            
+            // Show container logs for debugging
+            sh '''
+                echo "=== Container Status ==="
+                docker ps -a || true
+                
+                echo "=== Application Logs ==="
+                docker-compose logs app || true
+                
+                echo "=== MongoDB Logs ==="
+                docker-compose logs mongo || true
+            '''
+            
+            // Send failure notification (if configured)
+            script {
+                if (env.SLACK_WEBHOOK) {
+                    slackSend(
+                        color: 'danger',
+                        message: "❌ YelpCamp deployment failed!\nEnvironment: ${ENVIRONMENT}\nBuild: ${BUILD_NUMBER}\nCheck Jenkins for details."
+                    )
+                }
+            }
+        }
+        
+        unstable {
+            echo "⚠️ Pipeline completed with warnings"
+        }
+    }
+}

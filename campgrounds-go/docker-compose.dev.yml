@@ -1,0 +1,103 @@
+version: '3.8'
+
+services:
+  app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - GIN_MODE=debug
+      - MONGO_HOST=mongo
+      - MONGO_PORT=27017
+      - MONGO_USER=yelpcamp_dev
+      - MONGO_PASSWORD=dev_password_123
+      - MONGO_DATABASE=yelpcamp_dev
+      - JWT_SECRET=dev_jwt_secret_key_2024
+      - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
+      - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
+      - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
+    depends_on:
+      mongo:
+        condition: service_healthy
+    volumes:
+      - ./templates:/app/templates
+      - ./public:/app/public
+    restart: unless-stopped
+    networks:
+      - yelpcamp-network
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_USER=campgrounds_dev
+      - POSTGRES_PASSWORD=dev_password
+      - POSTGRES_DB=campgrounds_dev_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_dev_data:/var/lib/postgresql/data
+      - ./scripts/init-dev.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U campgrounds_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_dev_data:/data
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7.0
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=yelpcamp_dev
+      - MONGO_INITDB_ROOT_PASSWORD=dev_password_123
+      - MONGO_INITDB_DATABASE=yelpcamp_dev
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_dev_data:/data/db
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - yelpcamp-network
+
+  mongo-express:
+    image: mongo-express:latest
+    environment:
+      - ME_CONFIG_MONGODB_ADMINUSERNAME=yelpcamp_dev
+      - ME_CONFIG_MONGODB_ADMINPASSWORD=dev_password_123
+      - ME_CONFIG_MONGODB_SERVER=mongo
+      - ME_CONFIG_MONGODB_PORT=27017
+      - ME_CONFIG_BASICAUTH_USERNAME=admin
+      - ME_CONFIG_BASICAUTH_PASSWORD=admin123
+    ports:
+      - "8081:8081"
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - yelpcamp-network
+
+volumes:
+  postgres_dev_data:
+  redis_dev_data:
+  mongo_dev_data:
+
+networks:
+  yelpcamp-network:
+    driver: bridge

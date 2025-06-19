@@ -277,7 +277,7 @@ PORT=8080
                                 includePathPattern: "yelpcamp-app-${BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}.tar.gz"
                             )
                             
-                            // Upload test results and coverage
+                            // Upload test results and test coverage
                             s3Upload(
                                 bucket: "${S3_BUCKET}",
                                 path: "${ENVIRONMENT}/reports/${BUILD_NUMBER}/",

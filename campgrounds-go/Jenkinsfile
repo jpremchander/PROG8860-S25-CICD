@@ -191,7 +191,7 @@ PORT=3000
         
         stage('Test') {
             when {
-                not { params.SKIP_TESTS }
+                expression { return !params.SKIP_TESTS }
             }
             steps {
                 echo "🧪 Running tests..."
@@ -357,7 +357,7 @@ PORT=3000
         
         stage('Deploy to Localhost') {
             when {
-                expression { params.DEPLOY_LOCALLY }
+                expression { return params.DEPLOY_LOCALLY }
             }
             steps {
                 echo "🚀 Deploying to localhost..."
@@ -422,7 +422,7 @@ PORT=3000
         
         stage('Post-Deployment Tests') {
             when {
-                expression { params.DEPLOY_LOCALLY }
+                expression { return params.DEPLOY_LOCALLY }
             }
             steps {
                 echo "🔍 Running post-deployment tests..."

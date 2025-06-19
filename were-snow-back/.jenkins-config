@@ -1,0 +1,7 @@
+JENKINS_URL=https://ec7a-142-156-1-230.ngrok-free.app
+JENKINS_USER=prem
+JENKINS_PASSWORD=prem
+GITHUB_USER=jpremchander
+REPO_NAME=PROG8860-S25-CICD
+WEBHOOK_URL=https://ec7a-142-156-1-230.ngrok-free.app/github-webhook/
+WEBHOOK_ID=

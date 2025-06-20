@@ -8,9 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
-	"campgrounds-app/config"
-	"campgrounds-app/models"
+	"yelpcamp-go/config"
+	"yelpcamp-go/models"
 )
 
 type AuthController struct{}

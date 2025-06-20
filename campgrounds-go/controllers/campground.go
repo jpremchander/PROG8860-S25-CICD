@@ -7,8 +7,9 @@ import (
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"campgrounds-app/config"
-	"campgrounds-app/models"
+	"yelpcamp-go/config"
+	"yelpcamp-go/models"
+	"yelpcamp-go/utils"
 )
 
 type CampgroundController struct{}
@@ -241,7 +242,7 @@ func (cc *CampgroundController) UploadImages(c *gin.Context) {
 	}
 
 	// Upload images to Cloudinary
-	cloudinaryService, err := NewCloudinaryService()
+	cloudinaryService, err := utils.NewCloudinaryService()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not initialize image service"})
 		return

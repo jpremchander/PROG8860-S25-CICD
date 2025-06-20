@@ -2,15 +2,12 @@ package main
 
 import (
 	"log"
-	"net/http"
 	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"yelpcamp-go/config"
-	"yelpcamp-go/controllers"
 	"yelpcamp-go/middleware"
-	"yelpcamp-go/models"
 	"yelpcamp-go/routes"
 )
 

@@ -1,6 +1,7 @@
 /* Custom styles for YelpCamp */
 .hero-section {
-  background: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)), url("/static/images/hero-bg.jpg");
+  background: linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)),
+    url("https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=1200&h=800&fit=crop");
   background-size: cover;
   background-position: center;
   min-height: 100vh;
@@ -60,4 +61,19 @@
 .btn-success:hover {
   background-color: #229954;
   border-color: #229954;
+}
+
+/* Loading spinner */
+.spinner-border-sm {
+  width: 1rem;
+  height: 1rem;
+}
+
+/* Form validation */
+.is-invalid {
+  border-color: #dc3545;
+}
+
+.invalid-feedback {
+  display: block;
 }

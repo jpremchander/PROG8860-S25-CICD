@@ -1,10 +1,5 @@
 pipeline {
-    agent {
-        docker {
-            image 'golang:1.21-alpine'
-            args '-v /var/run/docker.sock:/var/run/docker.sock'
-        }
-    }
+    agent any  // Use Jenkins host instead of Docker container
     
     environment {
         // Application settings
@@ -28,6 +23,8 @@ pipeline {
         CGO_ENABLED = '0'
         GOOS = 'linux'
         GOARCH = 'amd64'
+        PATH = "/usr/local/go/bin:${env.PATH}"
+        GOPATH = "${WORKSPACE}/go"
     }
     
     parameters {
@@ -54,27 +51,24 @@ pipeline {
                 echo "🔧 Setting up build environment..."
                 
                 sh '''
-                    echo "Installing sudo and required packages..."
+                    echo "Checking current user and permissions..."
+                    whoami
+                    id
                     
-                    # Install sudo first
-                    apk add --no-cache sudo
-                    
-                    # Now install other packages with sudo
-                    sudo apk update
-                    sudo apk add --no-cache curl git bash docker-cli make wget
-                    
-                    # Install Docker Compose
-                    echo "Installing docker-compose..."
-                    sudo curl -L "https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
-                    sudo chmod +x /usr/local/bin/docker-compose
-                    
-                    # Verify installations
-                    echo "Verifying installations..."
+                    echo "Verifying Go installation..."
                     go version
+                    
+                    echo "Verifying other tools..."
                     docker --version
                     docker-compose --version
                     git --version
                     curl --version
+                    
+                    echo "Setting up Go workspace..."
+                    mkdir -p $GOPATH/bin
+                    export PATH=$PATH:$GOPATH/bin
+                    
+                    echo "✅ Environment setup completed"
                 '''
                 
                 script {
@@ -162,8 +156,8 @@ PORT=3000
                     try {
                         sh '''
                             echo "Installing golangci-lint..."
-                            curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.54.2
-                            export PATH=$PATH:$(go env GOPATH)/bin
+                            curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $GOPATH/bin v1.54.2
+                            export PATH=$PATH:$GOPATH/bin
                             
                             echo "Running golangci-lint..."
                             golangci-lint run --timeout=5m --out-format=checkstyle > golangci-lint-report.xml || echo "Lint issues found"
@@ -488,7 +482,7 @@ PORT=3000
         failure {
             echo "❌ Pipeline failed!"
             
-            // Show container logs for debugging 
+            // Show container logs for debugging
             sh '''
                 echo "=== Container Status ==="
                 docker ps -a || echo "Cannot list containers"
@@ -507,4 +501,3 @@ PORT=3000
         }
     }
 }
-// This Jenkinsfile defines a comprehensive CI/CD pipeline for a Go application using Docker and AWS S3.

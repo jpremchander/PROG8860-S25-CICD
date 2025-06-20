@@ -10,8 +10,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/assert"
-	"campgrounds-app/config"
-	"campgrounds-app/models"
+	"yelpcamp-go/config"
+	"yelpcamp-go/models"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )

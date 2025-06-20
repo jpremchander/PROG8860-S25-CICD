@@ -2,8 +2,8 @@ package routes
 
 import (
 	"github.com/gin-gonic/gin"
-	"campgrounds-app/controllers"
-	"campgrounds-app/middleware"
+	"yelpcamp-go/controllers"
+	"yelpcamp-go/middleware"
 )
 
 func SetupRoutes(r *gin.Engine) {

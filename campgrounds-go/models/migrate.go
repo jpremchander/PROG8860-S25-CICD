@@ -1,7 +1,7 @@
 package models
 
 import (
-	"campgrounds-app/config"
+	"yelpcamp-go/config"
 	"log"
 )
 

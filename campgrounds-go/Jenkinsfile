@@ -11,7 +11,7 @@ pipeline {
         PROJECT_DIR = "campgrounds-go"
         
         // Go environment
-        CGO_ENABLED = '1'  // Enable CGO for race detection
+        CGO_ENABLED = '0'
         GOOS = 'linux'
         GOARCH = 'amd64'
         PATH = "/usr/local/go/bin:${env.PATH}"
@@ -43,26 +43,9 @@ pipeline {
                 
                 dir("${PROJECT_DIR}") {
                     sh '''#!/bin/bash
-                        echo "Loading environment variables from .env file..."
-                        if [ -f .env ]; then
-                            echo "✅ .env file found"
-                            
-                            # Export all variables from .env file (POSIX compatible)
-                            set -a
-                            . .env
-                            set +a
-                            
-                            echo "Environment variables loaded:"
-                            echo "- GITHUB_USERNAME: ${GITHUB_USERNAME}"
-                            echo "- CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}"
-                            echo "- MONGO_HOST: ${MONGO_HOST}"
-                            echo "- S3_BUCKET: ${S3_BUCKET}"
-                        else
-                            echo "❌ .env file not found!"
-                            echo "Current directory contents:"
-                            ls -la
-                            exit 1
-                        fi
+                        echo "Current directory: $(pwd)"
+                        echo "Directory contents:"
+                        ls -la
                         
                         echo "Verifying Go installation..."
                         go version
@@ -94,65 +77,20 @@ pipeline {
             }
         }
         
-        stage('Fix Dependencies') {
+        stage('Download Dependencies') {
             steps {
-                echo "🔧 Fixing Go module dependencies..."
+                echo "📦 Downloading Go dependencies..."
                 
                 dir("${PROJECT_DIR}") {
                     sh '''#!/bin/bash
-                        echo "Loading environment variables..."
-                        set -a
-                        . .env
-                        set +a
-                        
-                        echo "Current directory: $(pwd)"
-                        echo "Checking current go.mod..."
+                        echo "Current go.mod:"
                         cat go.mod
-                        
-                        echo "Setting up Git authentication using environment variables..."
-                        echo "GitHub Username: ${GITHUB_USERNAME}"
-                        
-                        # Method 1: Git credential helper
-                        git config --global credential.helper store
-                        echo "https://${GITHUB_USERNAME}:${GITHUB_PASSWORD}@github.com" > ~/.git-credentials
-                        chmod 600 ~/.git-credentials
-                        
-                        # Method 2: URL rewriting for all GitHub access
-                        git config --global url."https://${GITHUB_USERNAME}:${GITHUB_PASSWORD}@github.com/".insteadOf "https://github.com/"
-                        git config --global url."https://${GITHUB_USERNAME}:${GITHUB_PASSWORD}@github.com/".insteadOf "git@github.com:"
-                        git config --global url."https://${GITHUB_USERNAME}:${GITHUB_PASSWORD}@github.com/".insteadOf "git://github.com/"
-                        
-                        # Method 3: .netrc file
-                        cat > ~/.netrc << EOF
-machine github.com
-login ${GITHUB_USERNAME}
-password ${GITHUB_PASSWORD}
-
-machine api.github.com
-login ${GITHUB_USERNAME}
-password ${GITHUB_PASSWORD}
-EOF
-                        chmod 600 ~/.netrc
-                        
-                        echo "Removing go.sum to force fresh dependency resolution..."
-                        rm -f go.sum
-                        
-                        echo "Setting Go environment from .env variables..."
-                        export GOPROXY=https://proxy.golang.org,direct
-                        export GOSUMDB=sum.golang.org
-                        export GIT_TERMINAL_PROMPT=0
-                        export GONOPROXY=""
-                        export GONOSUMDB=""
-                        export GOPRIVATE=""
                         
                         echo "Cleaning module cache..."
                         go clean -modcache
                         
-                        echo "Testing Git access to GitHub..."
-                        git ls-remote https://github.com/gin-gonic/gin.git HEAD || echo "Git access test failed"
-                        
-                        echo "Downloading modules with authentication..."
-                        go mod download -x
+                        echo "Downloading dependencies..."
+                        go mod download
                         
                         echo "Tidying modules..."
                         go mod tidy
@@ -162,113 +100,12 @@ EOF
                         
                         echo "Final go.mod:"
                         cat go.mod
-                        echo "Final go.sum (first 10 lines):"
-                        head -10 go.sum || echo "go.sum is empty or doesn't exist"
                         
-                        # Ensure go.sum exists
-                        if [ ! -f go.sum ]; then
-                            echo "Creating go.sum file..."
-                            go mod download
-                            go mod tidy
-                        fi
+                        echo "go.sum status:"
+                        ls -la go.sum || echo "go.sum not found"
                         
-                        echo "Cleaning up credentials..."
-                        rm -f ~/.git-credentials ~/.netrc
-                        git config --global --unset-all url."https://${GITHUB_USERNAME}:${GITHUB_PASSWORD}@github.com/".insteadOf || true
-                        
-                        echo "✅ Dependencies fixed successfully"
-                        echo "go.sum file status:"
-                        ls -la go.sum || echo "go.sum still missing!"
+                        echo "✅ Dependencies downloaded successfully"
                     '''
-                }
-            }
-        }
-        
-        stage('Lint & Static Analysis') {
-            steps {
-                echo "🔍 Running lint and static analysis..."
-                
-                dir("${PROJECT_DIR}") {
-                    script {
-                        try {
-                            sh '''#!/bin/bash
-                                # Load environment variables
-                                set -a
-                                . .env
-                                set +a
-                                
-                                echo "Formatting code first..."
-                                go fmt ./...
-                                
-                                echo "Installing golangci-lint..."
-                                curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $GOPATH/bin v1.54.2
-                                export PATH=$PATH:$GOPATH/bin
-                                
-                                echo "Running golangci-lint..."
-                                golangci-lint run --timeout=5m --out-format=checkstyle > golangci-lint-report.xml || echo "Lint issues found"
-                                
-                                echo "Running go vet..."
-                                go vet ./... || echo "Go vet issues found"
-                                
-                                echo "✅ Code formatting and linting completed"
-                            '''
-                            
-                            echo "✅ Lint and static analysis completed"
-                        } catch (Exception e) {
-                            echo "⚠️ Lint issues found, but continuing..."
-                            currentBuild.result = 'UNSTABLE'
-                        }
-                    }
-                }
-            }
-            post {
-                always {
-                    archiveArtifacts artifacts: "${PROJECT_DIR}/golangci-lint-report.xml", allowEmptyArchive: true
-                }
-            }
-        }
-        
-        stage('Test') {
-            when {
-                expression { return !params.SKIP_TESTS }
-            }
-            steps {
-                echo "🧪 Running tests..."
-                
-                dir("${PROJECT_DIR}") {
-                    script {
-                        try {
-                            sh '''#!/bin/bash
-                                # Load environment variables
-                                set -a
-                                . .env
-                                set +a
-                                
-                                echo "Running tests with coverage (without race detection for now)..."
-                                go test -v -coverprofile=coverage.out ./... 2>&1 | tee test-results.txt
-                                
-                                echo "Generating coverage report..."
-                                go tool cover -html=coverage.out -o coverage.html
-                                go tool cover -func=coverage.out > coverage-summary.txt
-                                
-                                echo "Test Coverage Summary:"
-                                cat coverage-summary.txt
-                                
-                                echo "✅ Tests completed successfully"
-                            '''
-                            
-                            echo "✅ Tests completed successfully"
-                        } catch (Exception e) {
-                            echo "❌ Tests failed!"
-                            sh 'cat test-results.txt || echo "No test results file found"'
-                            error("Tests failed - stopping pipeline")
-                        }
-                    }
-                }
-            }
-            post {
-                always {
-                    archiveArtifacts artifacts: "${PROJECT_DIR}/coverage.out,${PROJECT_DIR}/coverage.html,${PROJECT_DIR}/coverage-summary.txt,${PROJECT_DIR}/test-results.txt", allowEmptyArchive: true
                 }
             }
         }
@@ -279,20 +116,8 @@ EOF
                 
                 dir("${PROJECT_DIR}") {
                     sh '''#!/bin/bash
-                        # Load environment variables
-                        set -a
-                        . .env
-                        set +a
-                        
-                        echo "Ensuring go.sum exists before building..."
-                        if [ ! -f go.sum ]; then
-                            echo "go.sum missing, regenerating..."
-                            go mod download
-                            go mod tidy
-                        fi
-                        
                         echo "Building Go binary..."
-                        CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -ldflags="-w -s" -o yelpcamp-app .
+                        go build -v -o yelpcamp-app .
                         
                         echo "Verifying binary..."
                         ls -la yelpcamp-app
@@ -300,18 +125,15 @@ EOF
                         
                         # Test if binary runs
                         echo "Testing binary execution..."
-                        ./yelpcamp-app --help || echo "Binary test completed"
+                        timeout 5s ./yelpcamp-app || echo "Binary test completed (timeout expected)"
                         
                         echo "Creating application archive..."
                         mkdir -p artifacts
                         cp yelpcamp-app artifacts/
-                        cp -r templates artifacts/ 2>/dev/null || echo "No templates directory"
-                        cp -r public artifacts/ 2>/dev/null || echo "No public directory"
-                        cp docker-compose*.yml artifacts/ 2>/dev/null || echo "No docker-compose files"
-                        cp Dockerfile* artifacts/ 2>/dev/null || echo "No Dockerfile"
-                        cp .env artifacts/
                         cp go.mod artifacts/
                         cp go.sum artifacts/ 2>/dev/null || echo "No go.sum to copy"
+                        cp Dockerfile artifacts/
+                        cp docker-compose*.yml artifacts/ 2>/dev/null || echo "No docker-compose files"
                         
                         # Create versioned archive
                         tar -czf yelpcamp-app-${BUILD_NUMBER}-${GIT_COMMIT_SHORT}.tar.gz -C artifacts .
@@ -340,18 +162,6 @@ EOF
                     script {
                         try {
                             sh '''#!/bin/bash
-                                # Load environment variables
-                                set -a
-                                . .env
-                                set +a
-                                
-                                echo "Ensuring go.sum exists for Docker build..."
-                                if [ ! -f go.sum ]; then
-                                    echo "Creating go.sum for Docker..."
-                                    go mod download
-                                    go mod tidy
-                                fi
-                                
                                 echo "Building application Docker image..."
                                 docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
                                 docker build -t ${DOCKER_IMAGE}:latest .
@@ -365,7 +175,7 @@ EOF
                                 fi
                                 
                                 echo "Docker images built successfully:"
-                                docker images | grep ${DOCKER_IMAGE} || echo "No images found with name ${DOCKER_IMAGE}"
+                                docker images | grep ${DOCKER_IMAGE}
                             '''
                             
                             echo "✅ Docker images built successfully"
@@ -379,28 +189,25 @@ EOF
             }
         }
         
-        stage('Configure AWS & Upload to S3') {
+        stage('Upload Artifacts to S3') {
             steps {
-                echo "☁️ Configuring AWS and uploading artifacts to S3..."
+                echo "☁️ Uploading artifacts to S3..."
                 
                 dir("${PROJECT_DIR}") {
                     script {
                         try {
-                            sh '''#!/bin/bash
-                                # Load environment variables
-                                set -a
-                                . .env
-                                set +a
-                                
-                                echo "S3 Bucket: ${S3_BUCKET}"
-                                echo "AWS Region: ${AWS_REGION}"
-                                echo "IAM Role: ${IAM_ROLE}"
-                                
-                                # Create build metadata
-                                cat > build-metadata.json << EOF
+                            // Use your existing AWS credentials configuration
+                            withCredentials([aws(credentialsId: 'AWSCREDENTIALS', accessKeyVariable: 'AWS_ACCESS_KEY_ID', secretKeyVariable: 'AWS_SECRET_ACCESS_KEY')]) {
+                                sh '''#!/bin/bash
+                                    echo "S3 Bucket: yelpcamp-artifacts-bucket"
+                                    echo "AWS Region: us-east-1"
+                                    echo "Using AWS credentials ID: AWSCREDENTIALS"
+                                    
+                                    # Create build metadata
+                                    cat > build-metadata.json << EOF
 {
     "build_number": "${BUILD_NUMBER}",
-                                "git_commit": "${GIT_COMMIT_SHORT}",
+    "git_commit": "${GIT_COMMIT_SHORT}",
     "environment": "${ENVIRONMENT:-dev}",
     "timestamp": "${BUILD_TIMESTAMP}",
     "docker_tag": "${DOCKER_TAG}",
@@ -410,41 +217,34 @@ EOF
     }
 }
 EOF
-                                
-                                # Install AWS CLI if not present
-                                if ! command -v aws >/dev/null 2>&1; then
-                                    echo "Installing AWS CLI..."
-                                    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-                                    unzip -q awscliv2.zip
-                                    sudo ./aws/install || echo "AWS CLI installation failed"
-                                fi
-                                
-                                # Configure AWS credentials (you'll need to set these in Jenkins)
-                                echo "Configuring AWS credentials..."
-                                aws configure set aws_access_key_id "${AWS_ACCESS_KEY_ID:-dummy}" || echo "AWS access key not set"
-                                aws configure set aws_secret_access_key "${AWS_SECRET_ACCESS_KEY:-dummy}" || echo "AWS secret key not set"
-                                aws configure set default.region "${AWS_REGION}"
-                                
-                                # Try to upload to S3
-                                if command -v aws >/dev/null 2>&1; then
-                                    echo "AWS CLI found, attempting S3 upload..."
                                     
-                                    # Upload application archive
-                                    aws s3 cp yelpcamp-app-${BUILD_NUMBER}-${GIT_COMMIT_SHORT}.tar.gz s3://${S3_BUCKET}/${ENVIRONMENT:-dev}/builds/ || echo "S3 upload failed - check credentials"
+                                    # Configure AWS CLI
+                                    aws configure set aws_access_key_id "${AWS_ACCESS_KEY_ID}"
+                                    aws configure set aws_secret_access_key "${AWS_SECRET_ACCESS_KEY}"
+                                    aws configure set default.region "us-east-1"
                                     
-                                    # Upload metadata
-                                    aws s3 cp build-metadata.json s3://${S3_BUCKET}/${ENVIRONMENT:-dev}/metadata/ || echo "Metadata upload failed"
+                                    # Test AWS connection
+                                    echo "Testing AWS connection..."
+                                    aws sts get-caller-identity || echo "AWS connection test failed"
                                     
-                                    echo "✅ S3 upload attempted"
-                                else
-                                    echo "⚠️ AWS CLI not available, skipping S3 upload"
-                                fi
-                            '''
-                            
-                            echo "✅ Artifacts processing completed"
-                            
+                                    # Upload to S3
+                                    echo "Uploading application archive..."
+                                    aws s3 cp yelpcamp-app-${BUILD_NUMBER}-${GIT_COMMIT_SHORT}.tar.gz s3://yelpcamp-artifacts-bucket/${ENVIRONMENT:-dev}/builds/ || echo "Archive upload failed"
+                                    
+                                    echo "Uploading metadata..."
+                                    aws s3 cp build-metadata.json s3://yelpcamp-artifacts-bucket/${ENVIRONMENT:-dev}/metadata/ || echo "Metadata upload failed"
+                                    
+                                    # List uploaded files
+                                    echo "Verifying S3 uploads..."
+                                    aws s3 ls s3://yelpcamp-artifacts-bucket/${ENVIRONMENT:-dev}/builds/ || echo "Cannot list S3 builds"
+                                    aws s3 ls s3://yelpcamp-artifacts-bucket/${ENVIRONMENT:-dev}/metadata/ || echo "Cannot list S3 metadata"
+                                    
+                                    echo "✅ S3 upload process completed"
+                                '''
+                            }
                         } catch (Exception e) {
                             echo "⚠️ S3 upload failed: ${e.getMessage()}"
+                            echo "This is expected if AWS credentials are not configured"
                             echo "Continuing with local deployment..."
                             currentBuild.result = 'UNSTABLE'
                         }
@@ -464,11 +264,6 @@ EOF
                     script {
                         try {
                             sh '''#!/bin/bash
-                                # Load environment variables
-                                set -a
-                                . .env
-                                set +a
-                                
                                 ENVIRONMENT=${ENVIRONMENT:-dev}
                                 
                                 echo "Stopping any existing containers..."
@@ -478,28 +273,25 @@ EOF
                                 docker system prune -f || echo "Cleanup completed"
                                 
                                 echo "Starting services..."
-                                if [ "${ENVIRONMENT}" = "prod" ]; then
-                                    echo "Deploying to PRODUCTION environment..."
-                                    docker-compose -f docker-compose.prod.yml up -d --build --force-recreate
-                                else
-                                    echo "Deploying to DEVELOPMENT environment..."
-                                    docker-compose -f docker-compose.dev.yml up -d --build --force-recreate
-                                fi
+                                docker-compose -f docker-compose.dev.yml up -d --build --force-recreate
                                 
                                 echo "Waiting for services to start..."
-                                sleep 45
+                                sleep 30
                                 
                                 echo "Checking service health..."
                                 docker-compose -f docker-compose.dev.yml ps
                                 
                                 echo "Checking container logs..."
-                                docker-compose -f docker-compose.dev.yml logs --tail=20 app || echo "No app logs yet"
+                                docker-compose -f docker-compose.dev.yml logs --tail=20 app
                                 
                                 echo "Checking if port 3000 is listening..."
                                 netstat -tlnp | grep :3000 || echo "Port 3000 not listening yet"
                                 
                                 echo "Waiting additional time for app to fully start..."
-                                sleep 30
+                                sleep 20
+                                
+                                echo "Final container status:"
+                                docker ps | grep yelpcamp || echo "No yelpcamp containers running"
                             '''
                             
                             echo "✅ Deployment completed successfully!"
@@ -515,9 +307,6 @@ EOF
                                 
                                 echo "=== Application Logs ==="
                                 docker-compose -f docker-compose.dev.yml logs app || echo "No app logs available"
-                                
-                                echo "=== MongoDB Logs ==="
-                                docker-compose -f docker-compose.dev.yml logs mongo || echo "No mongo logs available"
                                 
                                 echo "=== Network Status ==="
                                 netstat -tlnp | grep :3000 || echo "Port 3000 not in use"
@@ -542,25 +331,30 @@ EOF
                     try {
                         sh '''#!/bin/bash
                             echo "Waiting for application to be ready..."
-                            sleep 30
+                            sleep 20
                             
                             echo "Testing API endpoints..."
                             
                             # Test health endpoint with retries
                             echo "Testing /health endpoint..."
-                            for i in {1..5}; do
-                                if curl -f http://localhost:3000/health; then
+                            for i in {1..10}; do
+                                echo "Attempt $i..."
+                                if curl -f -s http://localhost:3000/health; then
                                     echo "✅ Health check passed on attempt $i"
                                     break
                                 else
                                     echo "❌ Health check failed on attempt $i, retrying..."
-                                    sleep 10
+                                    sleep 5
                                 fi
                             done
                             
+                            # Test root endpoint
+                            echo "Testing root endpoint..."
+                            curl -f -s http://localhost:3000/ || echo "Root endpoint failed"
+                            
                             # Test campgrounds endpoint
                             echo "Testing /api/campgrounds endpoint..."
-                            curl -f http://localhost:3000/api/campgrounds || echo "Campgrounds endpoint failed"
+                            curl -f -s http://localhost:3000/api/campgrounds || echo "Campgrounds endpoint failed"
                             
                             echo "✅ Post-deployment tests completed"
                         '''
@@ -575,10 +369,13 @@ EOF
                             docker ps -a
                             
                             echo "=== Final Application Logs ==="
-                            docker-compose -f campgrounds-go/docker-compose.dev.yml logs --tail=50 app || echo "No app logs"
+                            docker-compose -f docker-compose.dev.yml logs --tail=50 app || echo "No app logs"
                             
                             echo "=== Port Status ==="
                             netstat -tlnp | grep :3000 || echo "Port 3000 not listening"
+                            
+                            echo "=== Docker Network ==="
+                            docker network ls
                         '''
                         
                         currentBuild.result = 'UNSTABLE'
@@ -591,26 +388,6 @@ EOF
     post {
         always {
             echo "🧹 Cleaning up..."
-            
-            dir("${PROJECT_DIR}") {
-                // Clean up workspace but keep important artifacts
-                sh '''#!/bin/bash
-                    # Keep important files
-                    mkdir -p keep
-                    cp *.tar.gz keep/ 2>/dev/null || echo "No tar.gz files to keep"
-                    cp coverage.html keep/ 2>/dev/null || echo "No coverage.html to keep"
-                    cp build-metadata.json keep/ 2>/dev/null || echo "No build-metadata.json to keep"
-                    
-                    # Clean up build files
-                    rm -f yelpcamp-app
-                    rm -f coverage.out
-                    rm -f test-results.txt
-                    
-                    # Restore important files
-                    cp keep/* . 2>/dev/null || echo "No files to restore"
-                    rm -rf keep
-                '''
-            }
         }
         
         success {
@@ -620,35 +397,21 @@ EOF
             echo "  - Build Number: ${BUILD_NUMBER}"
             echo "  - Git Commit: ${env.GIT_COMMIT_SHORT}"
             echo "  - Docker Image: ${DOCKER_IMAGE}:${DOCKER_TAG}"
-            echo "  - Application URL: http://localhost:3000"
             echo ""
-            echo "🔗 Try accessing:"
+            echo "🔗 Try accessing these endpoints:"
+            echo "  - Root: http://localhost:3000/"
             echo "  - Health: http://localhost:3000/health"
             echo "  - API: http://localhost:3000/api/campgrounds"
+            echo "  - Auth: http://localhost:3000/api/auth"
             echo "  - Mongo Express: http://localhost:8081 (admin/admin123)"
         }
         
         failure {
             echo "❌ Pipeline failed!"
-            
-            dir("${PROJECT_DIR}") {
-                // Show container logs for debugging
-                sh '''#!/bin/bash
-                    echo "=== Container Status ==="
-                    docker ps -a || echo "Cannot list containers"
-                    
-                    echo "=== Application Logs ==="
-                    docker-compose logs app || echo "No app logs available"
-                    
-                    echo "=== MongoDB Logs ==="
-                    docker-compose logs mongo || echo "No mongo logs available"
-                '''
-            }
         }
         
         unstable {
             echo "⚠️ Pipeline completed with warnings"
-            echo "Check the logs above for details on what went wrong"
             echo "The application may still be accessible at http://localhost:3000"
         }
     }

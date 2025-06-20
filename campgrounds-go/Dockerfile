@@ -1,4 +1,4 @@
-# Development Dockerfile - Fixed for missing go.sum
+# Simple Dockerfile for basic Go app
 FROM golang:1.21-alpine AS builder
 
 # Install git and ca-certificates
@@ -6,11 +6,9 @@ RUN apk add --no-cache git ca-certificates tzdata
 
 WORKDIR /app
 
-# Copy go mod files first
+# Copy go mod files
 COPY go.mod ./
-# Copy go.sum if it exists, otherwise create empty file
-COPY go.su[m] ./
-RUN if [ ! -f go.sum ]; then touch go.sum; fi
+COPY go.sum ./
 
 # Download dependencies
 RUN go mod download
@@ -18,25 +16,18 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Ensure go.sum is properly generated
-RUN go mod tidy
-
 # Build the application
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o yelpcamp-app .
 
 # Final stage
 FROM alpine:latest
 
-RUN apk --no-cache add ca-certificates wget
+RUN apk --no-cache add ca-certificates wget curl
 
 WORKDIR /app
 
 # Copy the binary from builder stage
 COPY --from=builder /app/yelpcamp-app .
-
-# Copy static files
-COPY --from=builder /app/templates ./templates
-COPY --from=builder /app/public ./public
 
 # Create non-root user
 RUN addgroup -g 1001 -S appgroup && \

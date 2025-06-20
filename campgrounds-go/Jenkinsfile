@@ -54,19 +54,27 @@ pipeline {
                 echo "🔧 Setting up build environment..."
                 
                 sh '''
-                    echo "Checking current user and permissions..."
-                    whoami || echo "whoami not available"
-                    id || echo "id not available"
+                    echo "Installing sudo and required packages..."
                     
-                    echo "Go is already installed in this container:"
+                    # Install sudo first
+                    apk add --no-cache sudo
+                    
+                    # Now install other packages with sudo
+                    sudo apk update
+                    sudo apk add --no-cache curl git bash docker-cli make wget
+                    
+                    # Install Docker Compose
+                    echo "Installing docker-compose..."
+                    sudo curl -L "https://github.com/docker/compose/releases/download/v2.23.0/docker-compose-linux-x86_64" -o /usr/local/bin/docker-compose
+                    sudo chmod +x /usr/local/bin/docker-compose
+                    
+                    # Verify installations
+                    echo "Verifying installations..."
                     go version
-                    
-                    echo "Checking for existing tools..."
-                    which curl || echo "curl not found"
-                    which git || echo "git not found"
-                    which docker || echo "docker not found"
-                    
-                    echo "✅ Environment setup completed (using pre-installed tools)"
+                    docker --version
+                    docker-compose --version
+                    git --version
+                    curl --version
                 '''
                 
                 script {
@@ -363,33 +371,32 @@ PORT=3000
                 
                 script {
                     try {
-                        // Use Docker directly instead of docker-compose for now
-                        sh '''
-                            echo "Stopping existing containers..."
-                            docker stop yelpcamp-app || echo "No existing app container"
-                            docker rm yelpcamp-app || echo "No existing app container to remove"
-                            
-                            echo "Starting MongoDB container..."
-                            docker run -d --name yelpcamp-mongo \\
-                                -e MONGO_INITDB_ROOT_USERNAME=yelpcamp_${ENVIRONMENT} \\
-                                -e MONGO_INITDB_ROOT_PASSWORD=${ENVIRONMENT}_password_123 \\
-                                -e MONGO_INITDB_DATABASE=yelpcamp_${ENVIRONMENT} \\
-                                -p 27017:27017 \\
-                                mongo:7.0 || echo "MongoDB container may already be running"
-                            
-                            echo "Starting application container..."
-                            docker run -d --name yelpcamp-app \\
-                                --link yelpcamp-mongo:mongo \\
-                                -p 3000:3000 \\
-                                --env-file .env \\
-                                ${DOCKER_IMAGE}:${DOCKER_TAG} || echo "App container failed to start"
-                            
-                            echo "Waiting for services to start..."
-                            sleep 15
-                            
-                            echo "Checking container status..."
-                            docker ps | grep yelpcamp || echo "No yelpcamp containers running"
-                        '''
+                        // Deploy based on environment
+                        if (ENVIRONMENT == 'prod') {
+                            sh '''
+                                echo "Deploying to PRODUCTION environment..."
+                                docker-compose -f ${COMPOSE_FILE_PROD} down || echo "No existing containers"
+                                docker-compose -f ${COMPOSE_FILE_PROD} up -d --build
+                                
+                                echo "Waiting for services to start..."
+                                sleep 30
+                                
+                                echo "Checking service health..."
+                                docker-compose -f ${COMPOSE_FILE_PROD} ps
+                            '''
+                        } else {
+                            sh '''
+                                echo "Deploying to DEVELOPMENT environment..."
+                                docker-compose -f ${COMPOSE_FILE_DEV} down || echo "No existing containers"
+                                docker-compose -f ${COMPOSE_FILE_DEV} up -d --build
+                                
+                                echo "Waiting for services to start..."
+                                sleep 30
+                                
+                                echo "Checking service health..."
+                                docker-compose -f ${COMPOSE_FILE_DEV} ps
+                            '''
+                        }
                         
                         echo "✅ Deployment completed successfully!"
                         echo "🌐 Application should be running at: http://localhost:3000"
@@ -399,14 +406,10 @@ PORT=3000
                         
                         // Show logs for debugging
                         sh '''
-                            echo "=== Container Status ==="
-                            docker ps -a | grep yelpcamp || echo "No yelpcamp containers found"
-                            
                             echo "=== Application Logs ==="
-                            docker logs yelpcamp-app || echo "No app logs available"
-                            
+                            docker-compose logs app || echo "No app logs available"
                             echo "=== MongoDB Logs ==="
-                            docker logs yelpcamp-mongo || echo "No mongo logs available"
+                            docker-compose logs mongo || echo "No mongo logs available"
                         '''
                         
                         echo "⚠️ Deployment failed, but continuing..."
@@ -491,10 +494,10 @@ PORT=3000
                 docker ps -a || echo "Cannot list containers"
                 
                 echo "=== Application Logs ==="
-                docker logs yelpcamp-app || echo "No app logs available"
+                docker-compose logs app || echo "No app logs available"
                 
                 echo "=== MongoDB Logs ==="
-                docker logs yelpcamp-mongo || echo "No mongo logs available"
+                docker-compose logs mongo || echo "No mongo logs available"
             '''
         }
         

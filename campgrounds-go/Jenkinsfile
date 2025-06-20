@@ -98,69 +98,40 @@ pipeline {
             }
         }
         
-        stage('Environment Configuration') {
-            steps {
-                echo "🔧 Creating environment configuration..."
-                
-                script {
-                    // Create environment-specific .env file in the project directory
-                    def envContent = ""
-                    if (ENVIRONMENT == 'prod') {
-                        envContent = """
-# Production Environment
-GIN_MODE=release
-MONGO_HOST=mongo
-MONGO_PORT=27017
-MONGO_USER=yelpcamp_prod
-MONGO_PASSWORD=prod_secure_password_123
-MONGO_DATABASE=yelpcamp_prod
-JWT_SECRET=prod_jwt_super_secret_key_2024
-CLOUDINARY_CLOUD_NAME=dl0zvwr9i
-CLOUDINARY_API_KEY=719144713242759
-CLOUDINARY_API_SECRET=tCIGtTFz8vvEem2Vl1HuOd_7xhE
-PORT=3000
-"""
-                    } else {
-                        envContent = """
-# Development Environment
-GIN_MODE=debug
-MONGO_HOST=mongo
-MONGO_PORT=27017
-MONGO_USER=yelpcamp_dev
-MONGO_PASSWORD=dev_password_123
-MONGO_DATABASE=yelpcamp_dev
-JWT_SECRET=dev_jwt_secret_key_2024
-CLOUDINARY_CLOUD_NAME=dl0zvwr9i
-CLOUDINARY_API_KEY=719144713242759
-CLOUDINARY_API_SECRET=tCIGtTFz8vvEem2Vl1HuOd_7xhE
-PORT=3000
-"""
-                    }
-                    
-                    writeFile file: "${PROJECT_DIR}/.env", text: envContent
-                }
-                
-                echo "✅ Environment configuration created for: ${ENVIRONMENT}"
-            }
-        }
-        
         stage('Dependencies') {
             steps {
                 echo "📦 Installing Go dependencies..."
                 
                 dir("${PROJECT_DIR}") {
-                    sh '''
-                        echo "Current directory: $(pwd)"
-                        echo "Checking for Go module files..."
-                        ls -la go.mod go.sum || echo "Go module files not found"
-                        
-                        echo "Downloading Go modules..."
-                        go mod download
-                        go mod tidy
-                        go mod verify
-                        
-                        echo "✅ Dependencies installed successfully"
-                    '''
+                    withCredentials([usernamePassword(credentialsId: 'github-auth', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
+                        sh '''
+                            echo "Current directory: $(pwd)"
+                            echo "Checking for Go module files..."
+                            ls -la go.mod go.sum || echo "go.sum will be created after download"
+                            
+                            echo "Configuring Git for Go modules..."
+                            git config --global url."https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/".insteadOf "https://github.com/"
+                            git config --global url."https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/".insteadOf "git@github.com:"
+                            
+                            echo "Setting Go proxy environment..."
+                            export GOPROXY=https://proxy.golang.org,direct
+                            export GOSUMDB=sum.golang.org
+                            
+                            echo "Downloading Go modules..."
+                            go mod download
+                            
+                            echo "Tidying Go modules..."
+                            go mod tidy
+                            
+                            echo "Verifying Go modules..."
+                            go mod verify
+                            
+                            echo "Final module files:"
+                            ls -la go.mod go.sum
+                            
+                            echo "✅ Dependencies installed successfully"
+                        '''
+                    }
                 }
             }
         }

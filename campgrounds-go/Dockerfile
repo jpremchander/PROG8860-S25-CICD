@@ -1,4 +1,4 @@
-# Simple Dockerfile for basic Go app
+# Updated Dockerfile with templates and static files
 FROM golang:1.21-alpine AS builder
 
 # Install git and ca-certificates
@@ -28,6 +28,10 @@ WORKDIR /app
 
 # Copy the binary from builder stage
 COPY --from=builder /app/yelpcamp-app .
+
+# Copy templates and static files
+COPY --from=builder /app/templates ./templates
+COPY --from=builder /app/static ./static
 
 # Create non-root user
 RUN addgroup -g 1001 -S appgroup && \

@@ -1,6 +1,6 @@
 # YelpCamp Go - Jenkins CI/CD Implementation
 
-[![Build Status](http://localhost:3000/buildStatus/icon?job=yelpcamp-go-pipeline)](http://localhost:8080/job/yelpcamp-go-pipeline/)
+[![Build Status](http://localhost:8080/buildStatus/icon?job=yelpcamp-go-pipeline)](http://localhost:8080/job/yelpcamp-go-pipeline/)
 [![Go Report Card](https://goreportcard.com/badge/github.com/yourusername/yelpcamp-go-jenkins)](https://goreportcard.com/report/github.com/yourusername/yelpcamp-go-jenkins)
 
 A full-stack campgrounds management application built with **Go + MongoDB + Cloudinary**, featuring a comprehensive **Jenkins CI/CD pipeline** with multi-environment deployment, automated testing, and S3 artifact storage.

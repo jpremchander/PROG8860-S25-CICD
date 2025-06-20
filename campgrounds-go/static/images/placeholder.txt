@@ -1,0 +1,7 @@
+# Placeholder images directory
+# In a real application, you would have actual images here:
+# - hero-bg.jpg (hero background)
+# - hero-camping.jpg (camping image)
+# - campground1.jpg, campground2.jpg, campground3.jpg (campground images)
+
+# For now, the application will use placeholder URLs from external sources

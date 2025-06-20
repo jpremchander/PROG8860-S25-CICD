@@ -1,23 +1,13 @@
-# YelpCamp Setup Guide - Ready to Deploy!
+# YelpCamp Setup Guide - Environment Variables Configuration
 
-## ✅ Your Cloudinary Configuration
-From your CLOUDINARY_URL, I've extracted:
-- **Cloud Name**: `dl0zvwr9i`
-- **API Key**: `719144713242759`
-- **API Secret**: `tCIGtTFz8vvEem2Vl1HuOd_7xhE`
+## 🔧 **Environment Variables Setup**
 
-## 🚀 Quick Start (You're Ready!)
+All configuration is now managed through the `.env` file in the `campgrounds-go` directory. This includes your GitHub credentials for Go module downloads.
 
-### 1. Clone and Setup
-\`\`\`bash
-git clone <your-repo>
-cd yelpcamp-go-jenkins
+### **1. Your .env File Configuration**
 
-# Create your .env file
-cp .env.example .env
-\`\`\`
+The `.env` file contains all necessary configuration:
 
-### 2. Your .env File Should Look Like:
 \`\`\`env
 # Environment Configuration
 GIN_MODE=debug
@@ -29,151 +19,105 @@ MONGO_USER=yelpcamp_dev
 MONGO_PASSWORD=dev_password_123
 MONGO_DATABASE=yelpcamp_dev
 
-# JWT Secret
+# JWT Secret (Change this in production!)
 JWT_SECRET=your_super_secret_jwt_key_here
 
-# Cloudinary Configuration (Your actual credentials)
+# Cloudinary Configuration
 CLOUDINARY_CLOUD_NAME=dl0zvwr9i
 CLOUDINARY_API_KEY=719144713242759
 CLOUDINARY_API_SECRET=tCIGtTFz8vvEem2Vl1HuOd_7xhE
 
 # Server Configuration
-PORT=8080
+PORT=3000
 
-# AWS Configuration (Already configured)
+# AWS Configuration (for Jenkins S3 upload)
 AWS_REGION=us-east-1
 S3_BUCKET=yelpcamp-artifacts-bucket
 IAM_ROLE=arn:aws:iam::054037100649:role/yelpcamp-s3-role
+
+# GitHub Credentials for Go Module Downloads
+GITHUB_USERNAME=premchander.j.pc@gmail.com
+GITHUB_PASSWORD=Don$$trom1!
+
+# Git Configuration
+GIT_TERMINAL_PROMPT=0
+GOPROXY=direct
+GOSUMDB=off
 \`\`\`
 
-### 3. Test Locally First
+### **2. Security Benefits**
+
+✅ **No hardcoded credentials** in Jenkinsfile
+✅ **Easy to update** credentials without changing pipeline
+✅ **Environment-specific** configurations
+✅ **Git ignored** sensitive files (see .gitignore)
+
+### **3. How Jenkins Uses the .env File**
+
+The pipeline now:
+1. **Loads .env file** at the start of each stage
+2. **Exports all variables** to the shell environment
+3. **Uses your GitHub credentials** for Go module authentication
+4. **Cleans up credentials** after use for security
+
+### **4. Quick Start**
+
 \`\`\`bash
-# Install dependencies
-make deps
+# 1. Clone your repository
+git clone https://github.com/jpremchander/PROG8860-S25-CICD.git
+cd PROG8860-S25-CICD/campgrounds-go
 
-# Run tests
-make test
+# 2. Verify .env file exists with your credentials
+cat .env
 
-# Start development environment
+# 3. Test locally first
 make compose-dev
+
+# 4. Run Jenkins pipeline
+# The pipeline will automatically use your .env configuration
 \`\`\`
 
-Your app will be available at:
-- **Application**: http://localhost:8080
-- **MongoDB Admin**: http://localhost:8081 (admin/admin123)
+### **5. Jenkins Pipeline Flow**
 
-### 4. Jenkins Setup
+Each stage now:
 \`\`\`bash
-# Start Jenkins (if not already running)
-docker run -d -p 8080:8080 -p 50000:50000 \
-  -v jenkins_home:/var/jenkins_home \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  --name jenkins jenkins/jenkins:lts
+# Load environment variables
+set -a
+source .env
+set +a
 
-# Access Jenkins at http://localhost:8080
+# Use variables (e.g., $GITHUB_USERNAME, $GITHUB_PASSWORD)
+# Your credentials are automatically available
 \`\`\`
 
-### 5. Jenkins Configuration
-1. **Install Plugins**:
-   - Pipeline
-   - Docker Pipeline
-   - AWS Steps
-   - S3 Publisher
+### **6. Security Notes**
 
-2. **Add Credentials**:
-   - AWS credentials for S3 access
-   - Your Cloudinary credentials (already in code)
+⚠️ **Important Security Practices:**
+- The `.env` file is **NOT** committed to Git (see .gitignore)
+- Credentials are **cleaned up** after each stage
+- Use **environment-specific** .env files for different deployments
+- **Change default passwords** in production
 
-3. **Create Pipeline Job**:
-   - New Item → Pipeline
-   - SCM: Git (your repository)
-   - Script Path: `Jenkinsfile`
-
-### 6. Run Your First Build
-1. Go to your Jenkins job
-2. Click "Build with Parameters"
-3. Choose environment: `dev`
-4. Click "Build"
-
-## 🎯 What Happens During Build:
-
-1. **Checkout** - Gets your code
-2. **Environment Setup** - Creates config with your Cloudinary credentials
-3. **Lint & Static Analysis** - Checks code quality
-4. **Test** - Runs unit tests with coverage
-5. **Build Application** - Compiles Go binary
-6. **Build Docker Images** - Creates containerized app
-7. **Upload Artifacts to S3** - Stores build artifacts
-8. **Deploy to Localhost** - Runs with Docker Compose
-9. **Post-Deployment Tests** - Verifies everything works
-
-## 📸 Image Upload Testing
-
-Once deployed, you can test image uploads:
+### **7. Testing the Setup**
 
 \`\`\`bash
-# Register a user
-curl -X POST http://localhost:8080/api/auth/register \
-  -H "Content-Type: application/json" \
-  -d '{"username":"testuser","email":"test@example.com","password":"password123"}'
+# Test environment loading
+cd campgrounds-go
+source .env
+echo "GitHub User: $GITHUB_USERNAME"
+echo "Cloudinary: $CLOUDINARY_CLOUD_NAME"
 
-# Login to get token
-curl -X POST http://localhost:8080/api/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"username":"testuser","password":"password123"}'
-
-# Create a campground
-curl -X POST http://localhost:8080/api/campgrounds \
-  -H "Content-Type: application/json" \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -d '{"title":"Test Camp","description":"A beautiful test campground","location":"Test Valley","price":25.99}'
-
-# Upload images to campground
-curl -X POST http://localhost:8080/api/campgrounds/CAMPGROUND_ID/images \
-  -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  -F "images=@/path/to/your/image.jpg"
+# Test Go module download with your credentials
+go mod download
 \`\`\`
 
-## 🔍 Monitoring Your Deployment
+## 🚀 **Ready to Deploy!**
 
-\`\`\`bash
-# Check application logs
-make logs
+Your pipeline will now:
+1. ✅ **Load your GitHub credentials** from .env
+2. ✅ **Authenticate with GitHub** for Go modules
+3. ✅ **Use your Cloudinary settings** for image uploads
+4. ✅ **Deploy with your AWS configuration**
+5. ✅ **Clean up credentials** for security
 
-# Check MongoDB logs
-make logs-mongo
-
-# Check container status
-make status
-
-# Access MongoDB shell
-make mongo-shell
-\`\`\`
-
-## 🎉 You're All Set!
-
-Your YelpCamp application is now ready with:
-- ✅ **Cloudinary integration** configured with your credentials
-- ✅ **MongoDB database** with sample data
-- ✅ **Jenkins CI/CD pipeline** ready to deploy
-- ✅ **S3 artifact storage** configured
-- ✅ **Multi-environment support** (dev/prod)
-- ✅ **Comprehensive testing** and monitoring
-
-## 🚨 Important Notes:
-
-1. **Change JWT_SECRET** in production
-2. **Change MongoDB passwords** for production
-3. **Your Cloudinary credentials** are already configured
-4. **S3 bucket and IAM role** are already set up
-5. **Jenkins will handle** all deployments automatically
-
-## 📞 Need Help?
-
-If you encounter any issues:
-1. Check the logs: `make logs`
-2. Verify containers: `make status`
-3. Test locally first: `make compose-dev`
-4. Check Jenkins build logs for detailed error messages
-
-You're ready to deploy! 🚀
+The authentication issues should be completely resolved now! 🎉

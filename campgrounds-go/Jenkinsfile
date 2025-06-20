@@ -488,7 +488,7 @@ PORT=3000
         failure {
             echo "❌ Pipeline failed!"
             
-            // Show container logs for debugging
+            // Show container logs for debugging 
             sh '''
                 echo "=== Container Status ==="
                 docker ps -a || echo "Cannot list containers"
@@ -507,3 +507,4 @@ PORT=3000
         }
     }
 }
+// This Jenkinsfile defines a comprehensive CI/CD pipeline for a Go application using Docker and AWS S3.

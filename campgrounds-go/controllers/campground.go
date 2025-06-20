@@ -285,3 +285,141 @@ func (cc *CampgroundController) UploadImages(c *gin.Context) {
 		"images":  uploadedImages,
 	})
 }
+
+// Add these methods to the existing CampgroundController
+
+func (cc *CampgroundController) CreateWeb(c *gin.Context) {
+	title := c.PostForm("title")
+	description := c.PostForm("description")
+	location := c.PostForm("location")
+	priceStr := c.PostForm("price")
+
+	if title == "" || description == "" || location == "" || priceStr == "" {
+		c.HTML(http.StatusBadRequest, "new.html", gin.H{
+			"title": "Add New Campground",
+			"error": "All fields are required",
+		})
+		return
+	}
+
+	price, err := strconv.ParseFloat(priceStr, 64)
+	if err != nil || price < 0 {
+		c.HTML(http.StatusBadRequest, "new.html", gin.H{
+			"title": "Add New Campground",
+			"error": "Invalid price",
+		})
+		return
+	}
+
+	userID := c.MustGet("user_id").(primitive.ObjectID)
+
+	campground := models.Campground{
+		Title:       title,
+		Description: description,
+		Location:    location,
+		Price:       price,
+		AuthorID:    userID,
+	}
+
+	db := config.GetDB()
+	if err := campground.Create(db); err != nil {
+		c.HTML(http.StatusInternalServerError, "new.html", gin.H{
+			"title": "Add New Campground",
+			"error": "Could not create campground",
+		})
+		return
+	}
+
+	c.Redirect(http.StatusSeeOther, "/campgrounds/"+campground.ID.Hex())
+}
+
+func (cc *CampgroundController) UpdateWeb(c *gin.Context) {
+	idParam := c.Param("id")
+	id, err := primitive.ObjectIDFromHex(idParam)
+	if err != nil {
+		c.HTML(http.StatusBadRequest, "error.html", gin.H{
+			"title": "Error",
+			"error": "Invalid campground ID",
+		})
+		return
+	}
+
+	title := c.PostForm("title")
+	description := c.PostForm("description")
+	location := c.PostForm("location")
+	priceStr := c.PostForm("price")
+
+	price, err := strconv.ParseFloat(priceStr, 64)
+	if err != nil || price < 0 {
+		c.HTML(http.StatusBadRequest, "edit.html", gin.H{
+			"title": "Edit Campground",
+			"error": "Invalid price",
+		})
+		return
+	}
+
+	userID := c.MustGet("user_id").(primitive.ObjectID)
+	db := config.GetDB()
+	
+	campground, err := models.FindCampgroundByID(db, id)
+	if err != nil {
+		c.HTML(http.StatusNotFound, "error.html", gin.H{
+			"title": "Error",
+			"error": "Campground not found",
+		})
+		return
+	}
+
+	if campground.AuthorID != userID {
+		c.HTML(http.StatusForbidden, "error.html", gin.H{
+			"title": "Error",
+			"error": "Not authorized to update this campground",
+		})
+		return
+	}
+
+	campground.Title = title
+	campground.Description = description
+	campground.Location = location
+	campground.Price = price
+
+	if err := campground.Update(db); err != nil {
+		c.HTML(http.StatusInternalServerError, "edit.html", gin.H{
+			"title": "Edit Campground",
+			"error": "Could not update campground",
+		})
+		return
+	}
+
+	c.Redirect(http.StatusSeeOther, "/campgrounds/"+campground.ID.Hex())
+}
+
+func (cc *CampgroundController) DeleteWeb(c *gin.Context) {
+	idParam := c.Param("id")
+	id, err := primitive.ObjectIDFromHex(idParam)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid campground ID"})
+		return
+	}
+
+	userID := c.MustGet("user_id").(primitive.ObjectID)
+	db := config.GetDB()
+	
+	campground, err := models.FindCampgroundByID(db, id)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Campground not found"})
+		return
+	}
+
+	if campground.AuthorID != userID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "Not authorized"})
+		return
+	}
+
+	if err := campground.Delete(db); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not delete campground"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Campground deleted successfully"})
+}

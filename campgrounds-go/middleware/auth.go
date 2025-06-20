@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 func AuthRequired() gin.HandlerFunc {
@@ -37,7 +38,54 @@ func AuthRequired() gin.HandlerFunc {
 			return
 		}
 
-		userID := uint(claims["user_id"].(float64))
+		userIDStr := claims["user_id"].(string)
+		userID, err := primitive.ObjectIDFromHex(userIDStr)
+		if err != nil {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user ID"})
+			c.Abort()
+			return
+		}
+
+		c.Set("user_id", userID)
+		c.Next()
+	}
+}
+
+func WebAuthRequired() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		// Check for JWT token in cookie
+		tokenString, err := c.Cookie("token")
+		if err != nil {
+			c.Redirect(http.StatusSeeOther, "/login")
+			c.Abort()
+			return
+		}
+
+		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+			return []byte(os.Getenv("JWT_SECRET")), nil
+		})
+
+		if err != nil || !token.Valid {
+			c.Redirect(http.StatusSeeOther, "/login")
+			c.Abort()
+			return
+		}
+
+		claims, ok := token.Claims.(jwt.MapClaims)
+		if !ok {
+			c.Redirect(http.StatusSeeOther, "/login")
+			c.Abort()
+			return
+		}
+
+		userIDStr := claims["user_id"].(string)
+		userID, err := primitive.ObjectIDFromHex(userIDStr)
+		if err != nil {
+			c.Redirect(http.StatusSeeOther, "/login")
+			c.Abort()
+			return
+		}
+
 		c.Set("user_id", userID)
 		c.Next()
 	}

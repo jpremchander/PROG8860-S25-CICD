@@ -103,35 +103,35 @@ pipeline {
                 echo "📦 Installing Go dependencies..."
                 
                 dir("${PROJECT_DIR}") {
-                    withCredentials([usernamePassword(credentialsId: 'github-auth', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
-                        sh '''
-                            echo "Current directory: $(pwd)"
-                            echo "Checking for Go module files..."
-                            ls -la go.mod go.sum || echo "go.sum will be created after download"
-                            
-                            echo "Configuring Git for Go modules..."
-                            git config --global url."https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/".insteadOf "https://github.com/"
-                            git config --global url."https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/".insteadOf "git@github.com:"
-                            
-                            echo "Setting Go proxy environment..."
-                            export GOPROXY=https://proxy.golang.org,direct
-                            export GOSUMDB=sum.golang.org
-                            
-                            echo "Downloading Go modules..."
-                            go mod download
-                            
-                            echo "Tidying Go modules..."
-                            go mod tidy
-                            
-                            echo "Verifying Go modules..."
-                            go mod verify
-                            
-                            echo "Final module files:"
-                            ls -la go.mod go.sum
-                            
-                            echo "✅ Dependencies installed successfully"
-                        '''
-                    }
+                    sh '''
+                        echo "Current directory: $(pwd)"
+                        echo "Checking for Go module files..."
+                        ls -la go.mod go.sum || echo "go.sum will be created after download"
+                        
+                        echo "Using Go proxy to avoid direct GitHub access..."
+                        export GOPROXY=https://proxy.golang.org
+                        export GOSUMDB=sum.golang.org
+                        export GONOPROXY=""
+                        export GONOSUMDB=""
+                        export GOPRIVATE=""
+                        
+                        echo "Clearing any existing Go module cache..."
+                        go clean -modcache || echo "No module cache to clean"
+                        
+                        echo "Downloading Go modules via proxy..."
+                        go mod download
+                        
+                        echo "Tidying Go modules..."
+                        go mod tidy
+                        
+                        echo "Verifying Go modules..."
+                        go mod verify
+                        
+                        echo "Final module files:"
+                        ls -la go.mod go.sum
+                        
+                        echo "✅ Dependencies installed successfully"
+                    '''
                 }
             }
         }

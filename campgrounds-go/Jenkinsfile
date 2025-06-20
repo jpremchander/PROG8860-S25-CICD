@@ -42,13 +42,16 @@ pipeline {
                 echo "🔧 Setting up build environment..."
                 
                 dir("${PROJECT_DIR}") {
-                    sh '''
+                    sh '''#!/bin/bash
                         echo "Loading environment variables from .env file..."
                         if [ -f .env ]; then
                             echo "✅ .env file found"
-                            # Export all variables from .env file
+                            echo "Contents of .env file:"
+                            cat .env
+                            
+                            # Export all variables from .env file (POSIX compatible)
                             set -a
-                            source .env
+                            . .env
                             set +a
                             
                             echo "Environment variables loaded:"
@@ -58,6 +61,8 @@ pipeline {
                             echo "- S3_BUCKET: ${S3_BUCKET}"
                         else
                             echo "❌ .env file not found!"
+                            echo "Current directory contents:"
+                            ls -la
                             exit 1
                         fi
                         
@@ -96,10 +101,10 @@ pipeline {
                 echo "🔧 Fixing Go module dependencies..."
                 
                 dir("${PROJECT_DIR}") {
-                    sh '''
+                    sh '''#!/bin/bash
                         echo "Loading environment variables..."
                         set -a
-                        source .env
+                        . .env
                         set +a
                         
                         echo "Current directory: $(pwd)"
@@ -107,6 +112,7 @@ pipeline {
                         cat go.mod
                         
                         echo "Setting up Git authentication using environment variables..."
+                        echo "GitHub Username: ${GITHUB_USERNAME}"
                         
                         # Method 1: Git credential helper
                         git config --global credential.helper store
@@ -178,10 +184,10 @@ EOF
                 dir("${PROJECT_DIR}") {
                     script {
                         try {
-                            sh '''
+                            sh '''#!/bin/bash
                                 # Load environment variables
                                 set -a
-                                source .env
+                                . .env
                                 set +a
                                 
                                 echo "Installing golangci-lint..."
@@ -229,10 +235,10 @@ EOF
                 dir("${PROJECT_DIR}") {
                     script {
                         try {
-                            sh '''
+                            sh '''#!/bin/bash
                                 # Load environment variables
                                 set -a
-                                source .env
+                                . .env
                                 set +a
                                 
                                 echo "Running tests with coverage..."
@@ -269,10 +275,10 @@ EOF
                 echo "🏗️ Building Go application..."
                 
                 dir("${PROJECT_DIR}") {
-                    sh '''
+                    sh '''#!/bin/bash
                         # Load environment variables
                         set -a
-                        source .env
+                        . .env
                         set +a
                         
                         echo "Building Go binary..."
@@ -315,10 +321,10 @@ EOF
                 dir("${PROJECT_DIR}") {
                     script {
                         try {
-                            sh '''
+                            sh '''#!/bin/bash
                                 # Load environment variables
                                 set -a
-                                source .env
+                                . .env
                                 set +a
                                 
                                 echo "Building application Docker image..."
@@ -355,60 +361,56 @@ EOF
                 dir("${PROJECT_DIR}") {
                     script {
                         try {
-                            sh '''
+                            sh '''#!/bin/bash
                                 # Load environment variables
                                 set -a
-                                source .env
+                                . .env
                                 set +a
                                 
                                 echo "S3 Bucket: ${S3_BUCKET}"
                                 echo "AWS Region: ${AWS_REGION}"
                                 echo "IAM Role: ${IAM_ROLE}"
-                            '''
-                            
-                            withAWS(role: readFile("${PROJECT_DIR}/.env").split('\n').find { it.startsWith('IAM_ROLE=') }?.split('=')[1], 
-                                   region: readFile("${PROJECT_DIR}/.env").split('\n').find { it.startsWith('AWS_REGION=') }?.split('=')[1]) {
                                 
-                                def s3Bucket = readFile("${PROJECT_DIR}/.env").split('\n').find { it.startsWith('S3_BUCKET=') }?.split('=')[1]
-                                def environment = params.ENVIRONMENT ?: 'dev'
-                                
-                                // Upload application archive
-                                s3Upload(
-                                    bucket: s3Bucket,
-                                    path: "${environment}/builds/",
-                                    includePathPattern: "yelpcamp-app-${BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}.tar.gz"
-                                )
-                                
-                                // Upload test results and coverage
-                                s3Upload(
-                                    bucket: s3Bucket,
-                                    path: "${environment}/reports/${BUILD_NUMBER}/",
-                                    includePathPattern: "coverage.html,coverage-summary.txt,test-results.txt,golangci-lint-report.xml"
-                                )
-                                
-                                // Create and upload build metadata
-                                writeFile file: 'build-metadata.json', text: """
+                                # Create build metadata
+                                cat > build-metadata.json << EOF
 {
     "build_number": "${BUILD_NUMBER}",
-    "git_commit": "${env.GIT_COMMIT_SHORT}",
-    "environment": "${environment}",
-    "timestamp": "${env.BUILD_TIMESTAMP}",
+    "git_commit": "${GIT_COMMIT_SHORT}",
+    "environment": "${ENVIRONMENT:-dev}",
+    "timestamp": "${BUILD_TIMESTAMP}",
     "docker_tag": "${DOCKER_TAG}",
     "artifacts": {
-        "application": "yelpcamp-app-${BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}.tar.gz",
+        "application": "yelpcamp-app-${BUILD_NUMBER}-${GIT_COMMIT_SHORT}.tar.gz",
         "docker_image": "${DOCKER_IMAGE}:${DOCKER_TAG}"
     }
 }
-"""
-                                
-                                s3Upload(
-                                    bucket: s3Bucket,
-                                    path: "${environment}/metadata/",
-                                    includePathPattern: "build-metadata.json"
-                                )
-                            }
+EOF
+                            '''
                             
-                            echo "✅ Artifacts uploaded to S3 successfully"
+                            // Use AWS CLI directly since withAWS might have issues
+                            sh '''#!/bin/bash
+                                # Load environment variables
+                                set -a
+                                . .env
+                                set +a
+                                
+                                # Try to upload to S3 using AWS CLI
+                                if command -v aws >/dev/null 2>&1; then
+                                    echo "AWS CLI found, attempting S3 upload..."
+                                    
+                                    # Upload application archive
+                                    aws s3 cp yelpcamp-app-${BUILD_NUMBER}-${GIT_COMMIT_SHORT}.tar.gz s3://${S3_BUCKET}/${ENVIRONMENT:-dev}/builds/ || echo "S3 upload failed"
+                                    
+                                    # Upload metadata
+                                    aws s3 cp build-metadata.json s3://${S3_BUCKET}/${ENVIRONMENT:-dev}/metadata/ || echo "Metadata upload failed"
+                                    
+                                    echo "✅ S3 upload attempted"
+                                else
+                                    echo "⚠️ AWS CLI not available, skipping S3 upload"
+                                fi
+                            '''
+                            
+                            echo "✅ Artifacts processing completed"
                             
                         } catch (Exception e) {
                             echo "⚠️ S3 upload failed: ${e.getMessage()}"
@@ -430,10 +432,10 @@ EOF
                 dir("${PROJECT_DIR}") {
                     script {
                         try {
-                            sh '''
+                            sh '''#!/bin/bash
                                 # Load environment variables
                                 set -a
-                                source .env
+                                . .env
                                 set +a
                                 
                                 ENVIRONMENT=${ENVIRONMENT:-dev}
@@ -463,7 +465,7 @@ EOF
                             echo "❌ Deployment failed: ${e.getMessage()}"
                             
                             // Show logs for debugging
-                            sh '''
+                            sh '''#!/bin/bash
                                 echo "=== Application Logs ==="
                                 docker-compose logs app || echo "No app logs available"
                                 echo "=== MongoDB Logs ==="
@@ -487,7 +489,7 @@ EOF
                 
                 script {
                     try {
-                        sh '''
+                        sh '''#!/bin/bash
                             echo "Testing API endpoints..."
                             
                             # Test health endpoint
@@ -517,7 +519,7 @@ EOF
             
             dir("${PROJECT_DIR}") {
                 // Clean up workspace but keep important artifacts
-                sh '''
+                sh '''#!/bin/bash
                     # Keep important files
                     mkdir -p keep
                     cp *.tar.gz keep/ 2>/dev/null || echo "No tar.gz files to keep"
@@ -551,7 +553,7 @@ EOF
             
             dir("${PROJECT_DIR}") {
                 // Show container logs for debugging
-                sh '''
+                sh '''#!/bin/bash
                     echo "=== Container Status ==="
                     docker ps -a || echo "Cannot list containers"
                     

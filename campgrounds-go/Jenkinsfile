@@ -1,5 +1,5 @@
 pipeline {
-    agent any  // Use Jenkins host instead of Docker container
+    agent any
     
     environment {
         // Application settings
@@ -7,17 +7,8 @@ pipeline {
         DOCKER_IMAGE = 'yelpcamp-go'
         DOCKER_TAG = "${BUILD_NUMBER}"
         
-        // AWS S3 settings
-        S3_BUCKET = 'yelpcamp-artifacts-bucket'
-        AWS_REGION = 'us-east-1'
-        IAM_ROLE = 'arn:aws:iam::054037100649:role/yelpcamp-s3-role'
-        
-        // Docker Compose files
-        COMPOSE_FILE_DEV = 'docker-compose.dev.yml'
-        COMPOSE_FILE_PROD = 'docker-compose.prod.yml'
-        
-        // Environment specific settings
-        ENVIRONMENT = "${params.ENVIRONMENT ?: 'dev'}"
+        // Project directory
+        PROJECT_DIR = "campgrounds-go"
         
         // Go environment
         CGO_ENABLED = '0'
@@ -25,9 +16,6 @@ pipeline {
         GOARCH = 'amd64'
         PATH = "/usr/local/go/bin:${env.PATH}"
         GOPATH = "${WORKSPACE}/go"
-        
-        // Project directory
-        PROJECT_DIR = "campgrounds-go"
     }
     
     parameters {
@@ -53,31 +41,36 @@ pipeline {
             steps {
                 echo "🔧 Setting up build environment..."
                 
-                sh '''
-                    echo "Checking current user and permissions..."
-                    whoami
-                    id
-                    
-                    echo "Verifying Go installation..."
-                    go version
-                    
-                    echo "Verifying other tools..."
-                    docker --version
-                    docker-compose --version
-                    git --version
-                    curl --version
-                    
-                    echo "Setting up Go workspace..."
-                    mkdir -p $GOPATH/bin
-                    export PATH=$PATH:$GOPATH/bin
-                    
-                    echo "Checking project structure..."
-                    ls -la
-                    echo "Checking if campgrounds-go directory exists..."
-                    ls -la campgrounds-go/ || echo "campgrounds-go directory not found"
-                    
-                    echo "✅ Environment setup completed"
-                '''
+                dir("${PROJECT_DIR}") {
+                    sh '''
+                        echo "Loading environment variables from .env file..."
+                        if [ -f .env ]; then
+                            echo "✅ .env file found"
+                            # Export all variables from .env file
+                            set -a
+                            source .env
+                            set +a
+                            
+                            echo "Environment variables loaded:"
+                            echo "- GITHUB_USERNAME: ${GITHUB_USERNAME}"
+                            echo "- CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}"
+                            echo "- MONGO_HOST: ${MONGO_HOST}"
+                            echo "- S3_BUCKET: ${S3_BUCKET}"
+                        else
+                            echo "❌ .env file not found!"
+                            exit 1
+                        fi
+                        
+                        echo "Verifying Go installation..."
+                        go version
+                        
+                        echo "Setting up Go workspace..."
+                        mkdir -p $GOPATH/bin
+                        export PATH=$PATH:$GOPATH/bin
+                        
+                        echo "✅ Environment setup completed"
+                    '''
+                }
                 
                 script {
                     env.GIT_COMMIT_SHORT = sh(
@@ -91,7 +84,7 @@ pipeline {
                 }
                 
                 echo "📋 Build Info:"
-                echo "  - Environment: ${ENVIRONMENT}"
+                echo "  - Environment: ${params.ENVIRONMENT ?: 'dev'}"
                 echo "  - Git Commit: ${env.GIT_COMMIT_SHORT}"
                 echo "  - Build Number: ${BUILD_NUMBER}"
                 echo "  - Timestamp: ${env.BUILD_TIMESTAMP}"
@@ -104,16 +97,46 @@ pipeline {
                 
                 dir("${PROJECT_DIR}") {
                     sh '''
+                        echo "Loading environment variables..."
+                        set -a
+                        source .env
+                        set +a
+                        
                         echo "Current directory: $(pwd)"
                         echo "Checking current go.mod..."
                         cat go.mod
                         
+                        echo "Setting up Git authentication using environment variables..."
+                        
+                        # Method 1: Git credential helper
+                        git config --global credential.helper store
+                        echo "https://${GITHUB_USERNAME}:${GITHUB_PASSWORD}@github.com" > ~/.git-credentials
+                        chmod 600 ~/.git-credentials
+                        
+                        # Method 2: URL rewriting for all GitHub access
+                        git config --global url."https://${GITHUB_USERNAME}:${GITHUB_PASSWORD}@github.com/".insteadOf "https://github.com/"
+                        git config --global url."https://${GITHUB_USERNAME}:${GITHUB_PASSWORD}@github.com/".insteadOf "git@github.com:"
+                        git config --global url."https://${GITHUB_USERNAME}:${GITHUB_PASSWORD}@github.com/".insteadOf "git://github.com/"
+                        
+                        # Method 3: .netrc file
+                        cat > ~/.netrc << EOF
+machine github.com
+login ${GITHUB_USERNAME}
+password ${GITHUB_PASSWORD}
+
+machine api.github.com
+login ${GITHUB_USERNAME}
+password ${GITHUB_PASSWORD}
+EOF
+                        chmod 600 ~/.netrc
+                        
                         echo "Removing go.sum to force fresh dependency resolution..."
                         rm -f go.sum
                         
-                        echo "Setting Go environment for public modules..."
-                        export GOPROXY=https://proxy.golang.org,direct
-                        export GOSUMDB=sum.golang.org
+                        echo "Setting Go environment from .env variables..."
+                        export GOPROXY=${GOPROXY}
+                        export GOSUMDB=${GOSUMDB}
+                        export GIT_TERMINAL_PROMPT=${GIT_TERMINAL_PROMPT}
                         export GONOPROXY=""
                         export GONOSUMDB=""
                         export GOPRIVATE=""
@@ -121,14 +144,14 @@ pipeline {
                         echo "Cleaning module cache..."
                         go clean -modcache
                         
-                        echo "Updating dependencies to latest compatible versions..."
-                        go get -u ./...
+                        echo "Testing Git access to GitHub..."
+                        git ls-remote https://github.com/gin-gonic/gin.git HEAD || echo "Git access test failed"
+                        
+                        echo "Downloading modules with authentication..."
+                        go mod download
                         
                         echo "Tidying modules..."
                         go mod tidy
-                        
-                        echo "Downloading modules..."
-                        go mod download
                         
                         echo "Verifying modules..."
                         go mod verify
@@ -137,6 +160,10 @@ pipeline {
                         cat go.mod
                         echo "Final go.sum (first 10 lines):"
                         head -10 go.sum || echo "go.sum is empty or doesn't exist"
+                        
+                        echo "Cleaning up credentials..."
+                        rm -f ~/.git-credentials ~/.netrc
+                        git config --global --unset-all url."https://${GITHUB_USERNAME}:${GITHUB_PASSWORD}@github.com/".insteadOf || true
                         
                         echo "✅ Dependencies fixed successfully"
                     '''
@@ -152,6 +179,11 @@ pipeline {
                     script {
                         try {
                             sh '''
+                                # Load environment variables
+                                set -a
+                                source .env
+                                set +a
+                                
                                 echo "Installing golangci-lint..."
                                 curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $GOPATH/bin v1.54.2
                                 export PATH=$PATH:$GOPATH/bin
@@ -182,7 +214,6 @@ pipeline {
             }
             post {
                 always {
-                    // Archive lint results
                     archiveArtifacts artifacts: "${PROJECT_DIR}/golangci-lint-report.xml", allowEmptyArchive: true
                 }
             }
@@ -199,6 +230,11 @@ pipeline {
                     script {
                         try {
                             sh '''
+                                # Load environment variables
+                                set -a
+                                source .env
+                                set +a
+                                
                                 echo "Running tests with coverage..."
                                 go test -v -race -coverprofile=coverage.out ./... 2>&1 | tee test-results.txt
                                 
@@ -223,7 +259,6 @@ pipeline {
             }
             post {
                 always {
-                    // Archive test results and coverage
                     archiveArtifacts artifacts: "${PROJECT_DIR}/coverage.out,${PROJECT_DIR}/coverage.html,${PROJECT_DIR}/coverage-summary.txt,${PROJECT_DIR}/test-results.txt", allowEmptyArchive: true
                 }
             }
@@ -235,6 +270,11 @@ pipeline {
                 
                 dir("${PROJECT_DIR}") {
                     sh '''
+                        # Load environment variables
+                        set -a
+                        source .env
+                        set +a
+                        
                         echo "Building Go binary..."
                         go build -a -installsuffix cgo -ldflags="-w -s" -o yelpcamp-app .
                         
@@ -276,11 +316,17 @@ pipeline {
                     script {
                         try {
                             sh '''
+                                # Load environment variables
+                                set -a
+                                source .env
+                                set +a
+                                
                                 echo "Building application Docker image..."
                                 docker build -t ${DOCKER_IMAGE}:${DOCKER_TAG} .
                                 docker build -t ${DOCKER_IMAGE}:latest .
                                 
                                 # Tag for environment
+                                ENVIRONMENT=${ENVIRONMENT:-dev}
                                 if [ "${ENVIRONMENT}" = "prod" ]; then
                                     docker tag ${DOCKER_IMAGE}:${DOCKER_TAG} ${DOCKER_IMAGE}:prod
                                 else
@@ -309,18 +355,34 @@ pipeline {
                 dir("${PROJECT_DIR}") {
                     script {
                         try {
-                            withAWS(role: "${IAM_ROLE}", region: "${AWS_REGION}") {
+                            sh '''
+                                # Load environment variables
+                                set -a
+                                source .env
+                                set +a
+                                
+                                echo "S3 Bucket: ${S3_BUCKET}"
+                                echo "AWS Region: ${AWS_REGION}"
+                                echo "IAM Role: ${IAM_ROLE}"
+                            '''
+                            
+                            withAWS(role: readFile("${PROJECT_DIR}/.env").split('\n').find { it.startsWith('IAM_ROLE=') }?.split('=')[1], 
+                                   region: readFile("${PROJECT_DIR}/.env").split('\n').find { it.startsWith('AWS_REGION=') }?.split('=')[1]) {
+                                
+                                def s3Bucket = readFile("${PROJECT_DIR}/.env").split('\n').find { it.startsWith('S3_BUCKET=') }?.split('=')[1]
+                                def environment = params.ENVIRONMENT ?: 'dev'
+                                
                                 // Upload application archive
                                 s3Upload(
-                                    bucket: "${S3_BUCKET}",
-                                    path: "${ENVIRONMENT}/builds/",
+                                    bucket: s3Bucket,
+                                    path: "${environment}/builds/",
                                     includePathPattern: "yelpcamp-app-${BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}.tar.gz"
                                 )
                                 
                                 // Upload test results and coverage
                                 s3Upload(
-                                    bucket: "${S3_BUCKET}",
-                                    path: "${ENVIRONMENT}/reports/${BUILD_NUMBER}/",
+                                    bucket: s3Bucket,
+                                    path: "${environment}/reports/${BUILD_NUMBER}/",
                                     includePathPattern: "coverage.html,coverage-summary.txt,test-results.txt,golangci-lint-report.xml"
                                 )
                                 
@@ -329,7 +391,7 @@ pipeline {
 {
     "build_number": "${BUILD_NUMBER}",
     "git_commit": "${env.GIT_COMMIT_SHORT}",
-    "environment": "${ENVIRONMENT}",
+    "environment": "${environment}",
     "timestamp": "${env.BUILD_TIMESTAMP}",
     "docker_tag": "${DOCKER_TAG}",
     "artifacts": {
@@ -340,17 +402,13 @@ pipeline {
 """
                                 
                                 s3Upload(
-                                    bucket: "${S3_BUCKET}",
-                                    path: "${ENVIRONMENT}/metadata/",
+                                    bucket: s3Bucket,
+                                    path: "${environment}/metadata/",
                                     includePathPattern: "build-metadata.json"
                                 )
                             }
                             
                             echo "✅ Artifacts uploaded to S3 successfully"
-                            echo "📦 S3 Locations:"
-                            echo "  - Application: s3://${S3_BUCKET}/${ENVIRONMENT}/builds/yelpcamp-app-${BUILD_NUMBER}-${env.GIT_COMMIT_SHORT}.tar.gz"
-                            echo "  - Reports: s3://${S3_BUCKET}/${ENVIRONMENT}/reports/${BUILD_NUMBER}/"
-                            echo "  - Metadata: s3://${S3_BUCKET}/${ENVIRONMENT}/metadata/build-metadata.json"
                             
                         } catch (Exception e) {
                             echo "⚠️ S3 upload failed: ${e.getMessage()}"
@@ -372,32 +430,31 @@ pipeline {
                 dir("${PROJECT_DIR}") {
                     script {
                         try {
-                            // Deploy based on environment
-                            if (ENVIRONMENT == 'prod') {
-                                sh '''
+                            sh '''
+                                # Load environment variables
+                                set -a
+                                source .env
+                                set +a
+                                
+                                ENVIRONMENT=${ENVIRONMENT:-dev}
+                                
+                                # Deploy based on environment
+                                if [ "${ENVIRONMENT}" = "prod" ]; then
                                     echo "Deploying to PRODUCTION environment..."
-                                    docker-compose -f ${COMPOSE_FILE_PROD} down || echo "No existing containers"
-                                    docker-compose -f ${COMPOSE_FILE_PROD} up -d --build
-                                    
-                                    echo "Waiting for services to start..."
-                                    sleep 30
-                                    
-                                    echo "Checking service health..."
-                                    docker-compose -f ${COMPOSE_FILE_PROD} ps
-                                '''
-                            } else {
-                                sh '''
+                                    docker-compose -f docker-compose.prod.yml down || echo "No existing containers"
+                                    docker-compose -f docker-compose.prod.yml up -d --build
+                                else
                                     echo "Deploying to DEVELOPMENT environment..."
-                                    docker-compose -f ${COMPOSE_FILE_DEV} down || echo "No existing containers"
-                                    docker-compose -f ${COMPOSE_FILE_DEV} up -d --build
-                                    
-                                    echo "Waiting for services to start..."
-                                    sleep 30
-                                    
-                                    echo "Checking service health..."
-                                    docker-compose -f ${COMPOSE_FILE_DEV} ps
-                                '''
-                            }
+                                    docker-compose -f docker-compose.dev.yml down || echo "No existing containers"
+                                    docker-compose -f docker-compose.dev.yml up -d --build
+                                fi
+                                
+                                echo "Waiting for services to start..."
+                                sleep 30
+                                
+                                echo "Checking service health..."
+                                docker-compose ps
+                            '''
                             
                             echo "✅ Deployment completed successfully!"
                             echo "🌐 Application should be running at: http://localhost:3000"
@@ -482,7 +539,7 @@ pipeline {
         success {
             echo "🎉 Pipeline completed successfully!"
             echo "📋 Build Summary:"
-            echo "  - Environment: ${ENVIRONMENT}"
+            echo "  - Environment: ${params.ENVIRONMENT ?: 'dev'}"
             echo "  - Build Number: ${BUILD_NUMBER}"
             echo "  - Git Commit: ${env.GIT_COMMIT_SHORT}"
             echo "  - Docker Image: ${DOCKER_IMAGE}:${DOCKER_TAG}"

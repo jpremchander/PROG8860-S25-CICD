@@ -98,39 +98,47 @@ pipeline {
             }
         }
         
-        stage('Dependencies') {
+        stage('Fix Dependencies') {
             steps {
-                echo "📦 Installing Go dependencies..."
+                echo "🔧 Fixing Go module dependencies..."
                 
                 dir("${PROJECT_DIR}") {
                     sh '''
                         echo "Current directory: $(pwd)"
-                        echo "Checking for Go module files..."
-                        ls -la go.mod go.sum || echo "go.sum will be created after download"
+                        echo "Checking current go.mod..."
+                        cat go.mod
                         
-                        echo "Using Go proxy to avoid direct GitHub access..."
-                        export GOPROXY=https://proxy.golang.org
+                        echo "Removing go.sum to force fresh dependency resolution..."
+                        rm -f go.sum
+                        
+                        echo "Setting Go environment for public modules..."
+                        export GOPROXY=https://proxy.golang.org,direct
                         export GOSUMDB=sum.golang.org
                         export GONOPROXY=""
                         export GONOSUMDB=""
                         export GOPRIVATE=""
                         
-                        echo "Clearing any existing Go module cache..."
-                        go clean -modcache || echo "No module cache to clean"
+                        echo "Cleaning module cache..."
+                        go clean -modcache
                         
-                        echo "Downloading Go modules via proxy..."
-                        go mod download
+                        echo "Updating dependencies to latest compatible versions..."
+                        go get -u ./...
                         
-                        echo "Tidying Go modules..."
+                        echo "Tidying modules..."
                         go mod tidy
                         
-                        echo "Verifying Go modules..."
+                        echo "Downloading modules..."
+                        go mod download
+                        
+                        echo "Verifying modules..."
                         go mod verify
                         
-                        echo "Final module files:"
-                        ls -la go.mod go.sum
+                        echo "Final go.mod:"
+                        cat go.mod
+                        echo "Final go.sum (first 10 lines):"
+                        head -10 go.sum || echo "go.sum is empty or doesn't exist"
                         
-                        echo "✅ Dependencies installed successfully"
+                        echo "✅ Dependencies fixed successfully"
                     '''
                 }
             }

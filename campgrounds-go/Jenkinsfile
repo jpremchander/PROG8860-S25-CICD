@@ -225,15 +225,17 @@ pipeline {
                             docker run --rm \
                                 -v $(pwd):/app \
                                 -w /app \
-                                ${DOCKER_IMAGE}:dev-latest \
-                                sh -c "CGO_ENABLED=0 GOOS=linux go build -o campgrounds-go-dev main.go"
+                                -u root \
+                                yelp-camp:dev-latest \
+                                sh -c "CGO_ENABLED=0 GOOS=linux go build -o campgrounds-go-dev main.go && chown $(id -u):$(id -g) campgrounds-go-dev"
                             
                             echo "Building production binary..."
                             docker run --rm \
                                 -v $(pwd):/app \
                                 -w /app \
-                                ${DOCKER_IMAGE}:dev-latest \
-                                sh -c "CGO_ENABLED=0 GOOS=linux go build -ldflags='-w -s' -o campgrounds-go-prod main.go"
+                                -u root \
+                                yelp-camp:dev-latest \
+                                sh -c "CGO_ENABLED=0 GOOS=linux go build -ldflags='-w -s' -o campgrounds-go-prod main.go && chown $(id -u):$(id -g) campgrounds-go-prod"
                             
                             # Create artifact directories
                             mkdir -p artifacts/dev artifacts/prod

@@ -19,8 +19,8 @@ COPY . .
 # Development stage
 FROM base AS development
 
-# Install air for hot reloading (development only)
-RUN go install github.com/cosmtrek/air@latest
+# Install Air v1.49.0 (compatible with Go 1.23)
+RUN go install github.com/cosmtrek/air@v1.49.0
 
 # Expose development port
 EXPOSE 3001

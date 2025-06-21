@@ -12,19 +12,23 @@ import (
 )
 
 var (
-	DB         *mongo.Database
+	DB          *mongo.Database
 	MongoClient *mongo.Client
 )
 
 func ConnectMongoDB() {
 	// MongoDB connection string
 	mongoURI := fmt.Sprintf("mongodb://%s:%s@%s:%s/%s?authSource=admin",
-		os.Getenv("MONGO_USER"),
-		os.Getenv("MONGO_PASSWORD"),
-		os.Getenv("MONGO_HOST"),
-		os.Getenv("MONGO_PORT"),
-		os.Getenv("MONGO_DATABASE"),
+		getEnvOrDefault("MONGO_USER", "yelpcamp_dev"),
+		getEnvOrDefault("MONGO_PASSWORD", "dev_password_123"),
+		getEnvOrDefault("MONGO_HOST", "localhost"),
+		getEnvOrDefault("MONGO_PORT", "27017"),
+		getEnvOrDefault("MONGO_DATABASE", "yelpcamp_dev"),
 	)
+
+	log.Printf("🔗 Connecting to MongoDB: %s:%s", 
+		getEnvOrDefault("MONGO_HOST", "localhost"), 
+		getEnvOrDefault("MONGO_PORT", "27017"))
 
 	// Set client options
 	clientOptions := options.Client().ApplyURI(mongoURI)
@@ -48,9 +52,9 @@ func ConnectMongoDB() {
 	}
 
 	MongoClient = client
-	DB = client.Database(os.Getenv("MONGO_DATABASE"))
+	DB = client.Database(getEnvOrDefault("MONGO_DATABASE", "yelpcamp_dev"))
 	
-	log.Println("MongoDB connected successfully")
+	log.Println("✅ MongoDB connected successfully")
 }
 
 func GetDB() *mongo.Database {
@@ -62,5 +66,13 @@ func DisconnectMongoDB() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		MongoClient.Disconnect(ctx)
+		log.Println("🔌 MongoDB disconnected")
 	}
+}
+
+func getEnvOrDefault(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
 }

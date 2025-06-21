@@ -6,98 +6,36 @@ import (
 	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
+	"yelpcamp-go/config"
+	"yelpcamp-go/middleware"
+	"yelpcamp-go/routes"
 )
 
 func main() {
+	// Load environment variables
+	if err := godotenv.Load(); err != nil {
+		log.Println("No .env file found, using system environment variables")
+	}
+
+	// Connect to MongoDB
+	config.ConnectMongoDB()
+	defer config.DisconnectMongoDB()
+
 	// Initialize Gin router
 	r := gin.Default()
+
+	// Load HTML templates
+	r.LoadHTMLGlob("templates/*")
+	r.Static("/static", "./static")
 
 	// Basic middleware
 	r.Use(gin.Logger())
 	r.Use(gin.Recovery())
+	r.Use(middleware.CORS())
 
-	// CORS middleware
-	r.Use(func(c *gin.Context) {
-		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		if c.Request.Method == "OPTIONS" {
-			c.AbortWithStatus(204)
-			return
-		}
-		c.Next()
-	})
-
-	// Serve static files
-	r.Static("/static", "./static")
-	r.Static("/public", "./public")
-
-	// Skip template loading for now - comment this out
-	// r.LoadHTMLGlob("templates/*")
-
-	// Routes
-	r.GET("/", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"message": "🏕️ Welcome to YelpCamp Go!",
-			"status":  "running",
-			"version": "1.0.0",
-			"endpoints": []string{
-				"/health",
-				"/api/health",
-				"/api/campgrounds",
-			},
-		})
-	})
-
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status":  "healthy",
-			"service": "yelpcamp-go",
-			"version": "1.0.0",
-		})
-	})
-
-	// API routes
-	api := r.Group("/api")
-	{
-		api.GET("/health", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{
-				"status":  "ok",
-				"message": "YelpCamp Go API is running",
-				"version": "1.0.0",
-			})
-		})
-
-		api.GET("/campgrounds", func(c *gin.Context) {
-			campgrounds := []gin.H{
-				{"id": 1, "name": "Yellowstone National Park", "location": "Wyoming", "price": 25},
-				{"id": 2, "name": "Yosemite Valley", "location": "California", "price": 30},
-				{"id": 3, "name": "Grand Canyon", "location": "Arizona", "price": 35},
-			}
-
-			c.JSON(http.StatusOK, gin.H{
-				"success":     true,
-				"campgrounds": campgrounds,
-				"count":       len(campgrounds),
-			})
-		})
-
-		api.GET("/campgrounds/:id", func(c *gin.Context) {
-			id := c.Param("id")
-			campground := gin.H{
-				"id":          id,
-				"name":        "Sample Campground",
-				"location":    "Beautiful Location",
-				"price":       25,
-				"description": "A wonderful place to camp.",
-			}
-
-			c.JSON(http.StatusOK, gin.H{
-				"success":    true,
-				"campground": campground,
-			})
-		})
-	}
+	// Setup routes
+	routes.SetupRoutes(r)
 
 	// Start server
 	port := os.Getenv("PORT")
@@ -106,11 +44,11 @@ func main() {
 	}
 
 	log.Printf("🚀 YelpCamp Go Server starting on port %s", port)
-	log.Printf("🌐 Frontend: http://localhost:%s", port)
-	log.Printf("📡 API: http://localhost:%s/api/health", port)
-	log.Printf("🏕️  Campgrounds: http://localhost:%s/api/campgrounds", port)
-
+	log.Printf("🌐 Web interface: http://localhost:%s", port)
+	log.Printf("📡 API endpoints: http://localhost:%s/api", port)
+	log.Printf("🗄️  MongoDB: %s:%s", os.Getenv("MONGO_HOST"), os.Getenv("MONGO_PORT"))
+	
 	if err := r.Run(":" + port); err != nil {
-		log.Fatal("❌ Failed to start server:", err)
+		log.Fatal("Failed to start server:", err)
 	}
 }

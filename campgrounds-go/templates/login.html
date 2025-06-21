@@ -30,6 +30,12 @@
                     <div class="card-body">
                         <h2 class="card-title text-center mb-4">Welcome Back</h2>
                         
+                        {{if .error}}
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-triangle"></i> {{.error}}
+                        </div>
+                        {{end}}
+                        
                         <!-- Demo credentials info -->
                         <div class="alert alert-info">
                             <i class="fas fa-info-circle"></i> 
@@ -41,7 +47,7 @@
                         <!-- Alert for messages -->
                         <div id="alert-container"></div>
                         
-                        <form id="loginForm">
+                        <form method="POST" action="/login">
                             <div class="mb-3">
                                 <label for="username" class="form-label">Username</label>
                                 <input type="text" class="form-control" id="username" name="username" required>

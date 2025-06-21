@@ -30,10 +30,13 @@
                     <div class="card-body">
                         <h2 class="card-title text-center mb-4">Join YelpCamp</h2>
                         
-                        <!-- Alert for messages -->
-                        <div id="alert-container"></div>
+                        {{if .error}}
+                        <div class="alert alert-danger">
+                            <i class="fas fa-exclamation-triangle"></i> {{.error}}
+                        </div>
+                        {{end}}
                         
-                        <form id="registerForm">
+                        <form id="registerForm" method="POST" action="/register">
                             <div class="mb-3">
                                 <label for="username" class="form-label">Username</label>
                                 <input type="text" class="form-control" id="username" name="username" required>

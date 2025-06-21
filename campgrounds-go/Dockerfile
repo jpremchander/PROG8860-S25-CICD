@@ -1,14 +1,13 @@
-# Updated Dockerfile with templates and static files
+# Pure Go Dockerfile
 FROM golang:1.21-alpine AS builder
 
-# Install git and ca-certificates
+# Install build dependencies
 RUN apk add --no-cache git ca-certificates tzdata
 
 WORKDIR /app
 
 # Copy go mod files
-COPY go.mod ./
-COPY go.sum ./
+COPY go.mod go.sum ./
 
 # Download dependencies
 RUN go mod download
@@ -47,7 +46,7 @@ EXPOSE 3000
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/health || exit 1
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3000/api/health || exit 1
 
 # Run the binary
 CMD ["./yelpcamp-app"]

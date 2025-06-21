@@ -35,15 +35,19 @@ func SetupRoutes(r *gin.Engine) {
 }
 
 func setupWebRoutes(r *gin.Engine, authController *controllers.AuthController, campgroundController *controllers.CampgroundController, reviewController *controllers.ReviewController) {
+	// Apply optional auth to all web routes to check if user is logged in
+	r.Use(middleware.WebAuthOptional())
+
 	// Homepage
 	r.GET("/", func(c *gin.Context) {
 		c.HTML(http.StatusOK, "index.html", gin.H{
-			"title":   "YelpCamp Go",
-			"message": "Welcome to YelpCamp - Discover Amazing Campgrounds!",
+			"title":         "YelpCamp Go",
+			"message":       "Welcome to YelpCamp - Discover Amazing Campgrounds!",
+			"authenticated": c.GetBool("authenticated"),
 		})
 	})
 
-	// Campgrounds listing
+	// Campgrounds listing - PUBLIC but shows different content based on auth
 	r.GET("/campgrounds", func(c *gin.Context) {
 		db := config.GetDB()
 		campgrounds, err := models.FindAllCampgrounds(db)
@@ -56,12 +60,13 @@ func setupWebRoutes(r *gin.Engine, authController *controllers.AuthController, c
 		}
 
 		c.HTML(http.StatusOK, "campgrounds.html", gin.H{
-			"title":       "All Campgrounds",
-			"campgrounds": campgrounds,
+			"title":         "All Campgrounds",
+			"campgrounds":   campgrounds,
+			"authenticated": c.GetBool("authenticated"),
 		})
 	})
 
-	// Individual campground
+	// Individual campground - PUBLIC but shows different content based on auth
 	r.GET("/campgrounds/:id", func(c *gin.Context) {
 		idParam := c.Param("id")
 		id, err := primitive.ObjectIDFromHex(idParam)
@@ -87,16 +92,18 @@ func setupWebRoutes(r *gin.Engine, authController *controllers.AuthController, c
 		reviews, _ := models.FindReviewsByCampground(db, id)
 
 		c.HTML(http.StatusOK, "show.html", gin.H{
-			"title":      "Campground Details",
-			"campground": campground,
-			"reviews":    reviews,
+			"title":         "Campground Details",
+			"campground":    campground,
+			"reviews":       reviews,
+			"authenticated": c.GetBool("authenticated"),
 		})
 	})
 
 	// New campground form (protected)
 	r.GET("/campgrounds/new", middleware.WebAuthRequired(), func(c *gin.Context) {
 		c.HTML(http.StatusOK, "new.html", gin.H{
-			"title": "Add New Campground",
+			"title":         "Add New Campground",
+			"authenticated": true,
 		})
 	})
 
@@ -136,8 +143,9 @@ func setupWebRoutes(r *gin.Engine, authController *controllers.AuthController, c
 		}
 
 		c.HTML(http.StatusOK, "edit.html", gin.H{
-			"title":      "Edit Campground",
-			"campground": campground,
+			"title":         "Edit Campground",
+			"campground":    campground,
+			"authenticated": true,
 		})
 	})
 
@@ -172,20 +180,31 @@ func setupWebRoutes(r *gin.Engine, authController *controllers.AuthController, c
 		campgrounds, _ := models.FindCampgroundsByAuthor(db, id)
 
 		c.HTML(http.StatusOK, "profile.html", gin.H{
-			"title":       "User Profile",
-			"user":        user,
-			"campgrounds": campgrounds,
+			"title":         "User Profile",
+			"user":          user,
+			"campgrounds":   campgrounds,
+			"authenticated": c.GetBool("authenticated"),
 		})
 	})
 
 	// Authentication pages
 	r.GET("/register", func(c *gin.Context) {
+		// Redirect if already logged in
+		if c.GetBool("authenticated") {
+			c.Redirect(http.StatusSeeOther, "/campgrounds")
+			return
+		}
 		c.HTML(http.StatusOK, "register.html", gin.H{
 			"title": "Register - YelpCamp",
 		})
 	})
 
 	r.GET("/login", func(c *gin.Context) {
+		// Redirect if already logged in
+		if c.GetBool("authenticated") {
+			c.Redirect(http.StatusSeeOther, "/campgrounds")
+			return
+		}
 		c.HTML(http.StatusOK, "login.html", gin.H{
 			"title": "Login - YelpCamp",
 		})
@@ -194,10 +213,8 @@ func setupWebRoutes(r *gin.Engine, authController *controllers.AuthController, c
 	// Authentication actions
 	r.POST("/register", authController.RegisterWeb)
 	r.POST("/login", authController.LoginWeb)
-	r.POST("/logout", func(c *gin.Context) {
-		c.SetCookie("token", "", -1, "/", "", false, true)
-		c.Redirect(http.StatusSeeOther, "/")
-	})
+	r.GET("/logout", authController.Logout)
+	r.POST("/logout", authController.Logout)
 
 	// Review actions (protected)
 	r.POST("/campgrounds/:id/reviews", middleware.WebAuthRequired(), reviewController.CreateWeb)
@@ -235,6 +252,13 @@ func setupAPIRoutes(r *gin.Engine) {
 			})
 		})
 
+		// Auth routes
+		auth := api.Group("/auth")
+		{
+			auth.POST("/register", controllers.NewAuthController().Register)
+			auth.POST("/login", controllers.NewAuthController().Login)
+		}
+
 		// Campground routes
 		campgrounds := api.Group("/campgrounds")
 		{
@@ -247,6 +271,7 @@ func setupAPIRoutes(r *gin.Engine) {
 				}
 
 				c.JSON(http.StatusOK, gin.H{
+					"message":     "Campgrounds retrieved successfully",
 					"campgrounds": campgroundsList,
 					"count":       len(campgroundsList),
 				})
@@ -267,8 +292,17 @@ func setupAPIRoutes(r *gin.Engine) {
 					return
 				}
 
-				c.JSON(http.StatusOK, campground)
+				c.JSON(http.StatusOK, gin.H{
+					"message":    "Campground retrieved successfully",
+					"campground": campground,
+				})
 			})
+
+			// Protected routes
+			campgrounds.POST("", middleware.AuthRequired(), controllers.NewCampgroundController().Create)
+			campgrounds.PUT("/:id", middleware.AuthRequired(), controllers.NewCampgroundController().Update)
+			campgrounds.DELETE("/:id", middleware.AuthRequired(), controllers.NewCampgroundController().Delete)
+			campgrounds.POST("/:id/images", middleware.AuthRequired(), controllers.NewCampgroundController().UploadImages)
 		}
 	}
 }

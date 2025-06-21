@@ -3,6 +3,7 @@ package controllers
 import (
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -65,24 +66,40 @@ func (cc *CampgroundController) GetByID(c *gin.Context) {
 	})
 }
 
-// Helper function to save uploaded images to local storage
+// Enhanced image upload with better error handling
 func (cc *CampgroundController) saveUploadedImage(fileHeader *multipart.FileHeader, userID string, index int) (*models.Image, error) {
-	// Create uploads directory if it doesn't exist
-	uploadDir := "static/uploads"
+	// Create uploads directory structure
+	uploadDir := filepath.Join("static", "uploads", "campgrounds", userID)
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create upload directory: %v", err)
 	}
 
-	// Generate unique filename
-	timestamp := time.Now().Unix()
-	ext := filepath.Ext(fileHeader.Filename)
+	// Validate file type
+	allowedTypes := map[string]bool{
+		".jpg":  true,
+		".jpeg": true,
+		".png":  true,
+		".gif":  true,
+		".webp": true,
+	}
+
+	ext := strings.ToLower(filepath.Ext(fileHeader.Filename))
 	if ext == "" {
 		ext = ".jpg" // Default extension
 	}
-	
-	// Clean the extension and make it lowercase
-	ext = strings.ToLower(ext)
-	filename := fmt.Sprintf("%s_%d_%d%s", userID, timestamp, index, ext)
+
+	if !allowedTypes[ext] {
+		return nil, fmt.Errorf("unsupported file type: %s", ext)
+	}
+
+	// Validate file size (max 5MB)
+	if fileHeader.Size > 5*1024*1024 {
+		return nil, fmt.Errorf("file too large: %d bytes (max 5MB)", fileHeader.Size)
+	}
+
+	// Generate unique filename
+	timestamp := time.Now().Unix()
+	filename := fmt.Sprintf("campground_%s_%d_%d%s", userID, timestamp, index, ext)
 	filePath := filepath.Join(uploadDir, filename)
 
 	// Open uploaded file
@@ -106,9 +123,9 @@ func (cc *CampgroundController) saveUploadedImage(fileHeader *multipart.FileHead
 
 	// Return image info with correct URL path
 	return &models.Image{
-		URL:      fmt.Sprintf("/static/uploads/%s", filename),
+		URL:      fmt.Sprintf("/static/uploads/campgrounds/%s/%s", userID, filename),
 		Filename: fileHeader.Filename,
-		Key:      filename,
+		Key:      fmt.Sprintf("campgrounds/%s/%s", userID, filename),
 	}, nil
 }
 
@@ -151,20 +168,20 @@ func (cc *CampgroundController) CreateWeb(c *gin.Context) {
 	form, err := c.MultipartForm()
 	if err == nil && form.File["images"] != nil {
 		files := form.File["images"]
-		fmt.Printf("📸 Processing %d uploaded images...\n", len(files))
+		log.Printf("📸 Processing %d uploaded images...", len(files))
 		
 		for i, file := range files {
 			if file.Size > 0 { // Only process non-empty files
-				fmt.Printf("📷 Processing image %d: %s (size: %d bytes)\n", i+1, file.Filename, file.Size)
+				log.Printf("📷 Processing image %d: %s (size: %d bytes)", i+1, file.Filename, file.Size)
 				
 				// Save the actual uploaded image
 				savedImage, err := cc.saveUploadedImage(file, userID.Hex(), i)
 				if err != nil {
-					fmt.Printf("❌ Error saving image %s: %v\n", file.Filename, err)
+					log.Printf("❌ Error saving image %s: %v", file.Filename, err)
 					continue
 				}
 				
-				fmt.Printf("✅ Successfully saved image: %s -> %s\n", file.Filename, savedImage.URL)
+				log.Printf("✅ Successfully saved image: %s -> %s", file.Filename, savedImage.URL)
 				campground.Images = append(campground.Images, *savedImage)
 			}
 		}
@@ -172,7 +189,7 @@ func (cc *CampgroundController) CreateWeb(c *gin.Context) {
 
 	// If no images were uploaded or all failed, add a default one
 	if len(campground.Images) == 0 {
-		fmt.Println("📷 No images uploaded, using default placeholder")
+		log.Println("📷 No images uploaded, using default placeholder")
 		campground.Images = []models.Image{
 			{
 				URL:      "https://images.unsplash.com/photo-1504851149312-7a075b496cc7?w=800&h=600&fit=crop",
@@ -181,7 +198,7 @@ func (cc *CampgroundController) CreateWeb(c *gin.Context) {
 			},
 		}
 	} else {
-		fmt.Printf("✅ Successfully processed %d images for campground\n", len(campground.Images))
+		log.Printf("✅ Successfully processed %d images for campground", len(campground.Images))
 	}
 
 	db := config.GetDB()
@@ -193,7 +210,7 @@ func (cc *CampgroundController) CreateWeb(c *gin.Context) {
 		return
 	}
 
-	fmt.Printf("🎉 Campground created successfully with %d images\n", len(campground.Images))
+	log.Printf("🎉 Campground created successfully with %d images", len(campground.Images))
 	c.Redirect(http.StatusSeeOther, "/campgrounds/"+campground.ID.Hex())
 }
 
@@ -444,7 +461,7 @@ func (cc *CampgroundController) UploadImages(c *gin.Context) {
 		// Save uploaded image
 		savedImage, err := cc.saveUploadedImage(file, userID.Hex(), i)
 		if err != nil {
-			fmt.Printf("Error saving image %s: %v\n", file.Filename, err)
+			log.Printf("Error saving image %s: %v", file.Filename, err)
 			continue
 		}
 		uploadedImages = append(uploadedImages, *savedImage)

@@ -64,7 +64,7 @@ func (ac *AuthController) Register(c *gin.Context) {
 	})
 }
 
-// Web Registration
+// Web Registration - Fixed
 func (ac *AuthController) RegisterWeb(c *gin.Context) {
 	username := c.PostForm("username")
 	email := c.PostForm("email")
@@ -112,8 +112,11 @@ func (ac *AuthController) RegisterWeb(c *gin.Context) {
 		return
 	}
 
-	// Set cookie and redirect
-	c.SetCookie("token", token, 3600*24*7, "/", "", false, true) // 7 days
+	// Set secure cookie with proper settings
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("token", token, 3600*24*7, "/", "", false, true) // 7 days, httpOnly
+	
+	// Redirect to campgrounds page
 	c.Redirect(http.StatusSeeOther, "/campgrounds")
 }
 
@@ -151,7 +154,7 @@ func (ac *AuthController) Login(c *gin.Context) {
 	})
 }
 
-// Web Login
+// Web Login - Fixed
 func (ac *AuthController) LoginWeb(c *gin.Context) {
 	username := c.PostForm("username")
 	password := c.PostForm("password")
@@ -169,7 +172,7 @@ func (ac *AuthController) LoginWeb(c *gin.Context) {
 	if err != nil {
 		c.HTML(http.StatusUnauthorized, "login.html", gin.H{
 			"title": "Login - YelpCamp",
-			"error": "Invalid credentials",
+			"error": "Invalid username or password",
 		})
 		return
 	}
@@ -177,7 +180,7 @@ func (ac *AuthController) LoginWeb(c *gin.Context) {
 	if err := user.CheckPassword(password); err != nil {
 		c.HTML(http.StatusUnauthorized, "login.html", gin.H{
 			"title": "Login - YelpCamp",
-			"error": "Invalid credentials",
+			"error": "Invalid username or password",
 		})
 		return
 	}
@@ -191,17 +194,33 @@ func (ac *AuthController) LoginWeb(c *gin.Context) {
 		return
 	}
 
-	// Set cookie and redirect
-	c.SetCookie("token", token, 3600*24*7, "/", "", false, true) // 7 days
+	// Set secure cookie with proper settings
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("token", token, 3600*24*7, "/", "", false, true) // 7 days, httpOnly
+	
+	// Redirect to campgrounds page
 	c.Redirect(http.StatusSeeOther, "/campgrounds")
+}
+
+// Logout
+func (ac *AuthController) Logout(c *gin.Context) {
+	// Clear the cookie
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie("token", "", -1, "/", "", false, true)
+	c.Redirect(http.StatusSeeOther, "/")
 }
 
 func generateToken(userID primitive.ObjectID) (string, error) {
 	claims := jwt.MapClaims{
 		"user_id": userID.Hex(),
 		"exp":     time.Now().Add(time.Hour * 24 * 7).Unix(), // 7 days
+		"iat":     time.Now().Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(os.Getenv("JWT_SECRET")))
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = "your_super_secret_jwt_key_here" // fallback
+	}
+	return token.SignedString([]byte(jwtSecret))
 }

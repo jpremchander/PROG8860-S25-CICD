@@ -85,6 +85,25 @@
             color: #dee2e6;
             margin-bottom: 1rem;
         }
+        .sort-controls {
+            display: flex;
+            gap: 1rem;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .sort-btn {
+            padding: 8px 16px;
+            border: 1px solid #dee2e6;
+            background: white;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .sort-btn:hover, .sort-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
     </style>
 </head>
 <body>
@@ -100,9 +119,13 @@
             <div class="collapse navbar-collapse" id="navbarNav">
                 <div class="navbar-nav ms-auto">
                     <a class="nav-link active fw-semibold" href="/campgrounds">All Campgrounds</a>
-                    <a class="nav-link" href="/campgrounds/new">Add Campground</a>
-                    <a class="nav-link" href="/register">Register</a>
-                    <a class="nav-link" href="/login">Login</a>
+                    {{if .authenticated}}
+                        <a class="nav-link" href="/campgrounds/new">Add Campground</a>
+                        <a class="nav-link" href="/logout">Logout</a>
+                    {{else}}
+                        <a class="nav-link" href="/register">Register</a>
+                        <a class="nav-link" href="/login">Login</a>
+                    {{end}}
                 </div>
             </div>
         </div>
@@ -117,18 +140,24 @@
                     <p class="lead mb-0">Discover amazing campgrounds from around the world</p>
                 </div>
                 <div class="col-md-4 text-md-end">
-                    <a href="/campgrounds/new" class="btn btn-light btn-lg">
-                        <i class="fas fa-plus me-2"></i>Add New Campground
-                    </a>
+                    {{if .authenticated}}
+                        <a href="/campgrounds/new" class="btn btn-light btn-lg">
+                            <i class="fas fa-plus me-2"></i>Add New Campground
+                        </a>
+                    {{else}}
+                        <a href="/login" class="btn btn-light btn-lg">
+                            <i class="fas fa-sign-in-alt me-2"></i>Login to Add
+                        </a>
+                    {{end}}
                 </div>
             </div>
         </div>
     </div>
 
     <div class="container">
-        <!-- Search Section -->
+        <!-- Search and Sort Section -->
         <div class="search-section">
-            <div class="row align-items-center">
+            <div class="row align-items-center mb-3">
                 <div class="col-md-8">
                     <div class="input-group input-group-lg">
                         <span class="input-group-text bg-light border-0">
@@ -138,13 +167,15 @@
                     </div>
                 </div>
                 <div class="col-md-4 mt-3 mt-md-0">
-                    <select class="form-select form-select-lg bg-light border-0" id="sortSelect">
-                        <option value="newest">Newest First</option>
-                        <option value="oldest">Oldest First</option>
-                        <option value="price-low">Price: Low to High</option>
-                        <option value="price-high">Price: High to Low</option>
-                        <option value="name">Name: A to Z</option>
-                    </select>
+                    <div class="text-end">
+                        <span class="text-muted me-2">Sort by:</span>
+                        <div class="sort-controls d-inline-flex">
+                            <button class="sort-btn active" data-sort="newest">Newest</button>
+                            <button class="sort-btn" data-sort="price-low">Price ↑</button>
+                            <button class="sort-btn" data-sort="price-high">Price ↓</button>
+                            <button class="sort-btn" data-sort="name">Name</button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -170,11 +201,17 @@
                         {{else}}
                             <img src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=400&h=300&fit=crop" class="card-img-top" alt="{{.Title}}">
                         {{end}}
-                        <div class="price-badge">${{.Price}}/night</div>
+                        <div class="price-badge">${{printf "%.2f" .Price}}/night</div>
                     </div>
                     <div class="card-body d-flex flex-column">
                         <h5 class="card-title fw-bold">{{.Title}}</h5>
-                        <p class="card-text text-muted flex-grow-1">{{.Description}}</p>
+                        <p class="card-text text-muted flex-grow-1">
+                            {{if gt (len .Description) 100}}
+                                {{slice .Description 0 100}}...
+                            {{else}}
+                                {{.Description}}
+                            {{end}}
+                        </p>
                         <div class="mt-auto">
                             <p class="text-muted mb-2">
                                 <i class="fas fa-map-marker-alt text-primary"></i> {{.Location}}
@@ -195,14 +232,27 @@
             </div>
             {{end}}
         </div>
+
+        <!-- Results count -->
+        <div class="text-center mt-4">
+            <p class="text-muted">
+                Showing <span id="visibleCount">{{len .campgrounds}}</span> of {{len .campgrounds}} campgrounds
+            </p>
+        </div>
         {{else}}
         <div class="empty-state">
             <i class="fas fa-campground"></i>
             <h3 class="text-muted">No campgrounds found</h3>
             <p class="text-muted mb-4">Be the first to share an amazing campground with the community!</p>
-            <a href="/campgrounds/new" class="btn btn-primary btn-lg">
-                <i class="fas fa-plus me-2"></i>Add First Campground
-            </a>
+            {{if .authenticated}}
+                <a href="/campgrounds/new" class="btn btn-primary btn-lg">
+                    <i class="fas fa-plus me-2"></i>Add First Campground
+                </a>
+            {{else}}
+                <a href="/login" class="btn btn-primary btn-lg">
+                    <i class="fas fa-sign-in-alt me-2"></i>Login to Add Campground
+                </a>
+            {{end}}
         </div>
         {{end}}
 
@@ -220,6 +270,7 @@
         document.getElementById('searchInput').addEventListener('input', function() {
             const searchTerm = this.value.toLowerCase();
             const campgrounds = document.querySelectorAll('.campground-item');
+            let visibleCount = 0;
             
             campgrounds.forEach(campground => {
                 const name = campground.dataset.name.toLowerCase();
@@ -227,37 +278,52 @@
                 
                 if (name.includes(searchTerm) || location.includes(searchTerm)) {
                     campground.style.display = 'block';
+                    visibleCount++;
                 } else {
                     campground.style.display = 'none';
                 }
             });
+            
+            document.getElementById('visibleCount').textContent = visibleCount;
         });
 
         // Sort functionality
-        document.getElementById('sortSelect').addEventListener('change', function() {
-            const sortBy = this.value;
-            const grid = document.getElementById('campgroundsGrid');
-            const campgrounds = Array.from(document.querySelectorAll('.campground-item'));
-            
-            campgrounds.sort((a, b) => {
-                switch(sortBy) {
-                    case 'newest':
-                        return parseInt(b.dataset.date) - parseInt(a.dataset.date);
-                    case 'oldest':
-                        return parseInt(a.dataset.date) - parseInt(b.dataset.date);
-                    case 'price-low':
-                        return parseFloat(a.dataset.price) - parseFloat(b.dataset.price);
-                    case 'price-high':
-                        return parseFloat(b.dataset.price) - parseFloat(a.dataset.price);
-                    case 'name':
-                        return a.dataset.name.localeCompare(b.dataset.name);
-                    default:
-                        return 0;
-                }
+        document.querySelectorAll('.sort-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                // Update active state
+                document.querySelectorAll('.sort-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                
+                const sortBy = this.dataset.sort;
+                const grid = document.getElementById('campgroundsGrid');
+                const campgrounds = Array.from(document.querySelectorAll('.campground-item'));
+                
+                campgrounds.sort((a, b) => {
+                    switch(sortBy) {
+                        case 'newest':
+                            return parseInt(b.dataset.date) - parseInt(a.dataset.date);
+                        case 'oldest':
+                            return parseInt(a.dataset.date) - parseInt(b.dataset.date);
+                        case 'price-low':
+                            return parseFloat(a.dataset.price) - parseFloat(b.dataset.price);
+                        case 'price-high':
+                            return parseFloat(b.dataset.price) - parseFloat(a.dataset.price);
+                        case 'name':
+                            return a.dataset.name.localeCompare(b.dataset.name);
+                        default:
+                            return 0;
+                    }
+                });
+                
+                // Re-append sorted elements
+                campgrounds.forEach(campground => grid.appendChild(campground));
             });
-            
-            // Re-append sorted elements
-            campgrounds.forEach(campground => grid.appendChild(campground));
+        });
+
+        // Auto-refresh campgrounds count on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            const totalCampgrounds = document.querySelectorAll('.campground-item').length;
+            console.log(`Loaded ${totalCampgrounds} campgrounds`);
         });
     </script>
 </body>

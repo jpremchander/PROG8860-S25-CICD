@@ -22,7 +22,7 @@ func AuthRequired() gin.HandlerFunc {
 		tokenString := strings.Replace(authHeader, "Bearer ", "", 1)
 		
 		// Use the integrated JWT validation
-		claims, err := utils.ValidateJWTToken(tokenString)
+		userID, err := utils.ValidateJWTToken(tokenString)
 		if err != nil {
 			log.Printf("❌ API Auth failed: %v", err)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
@@ -30,15 +30,14 @@ func AuthRequired() gin.HandlerFunc {
 			return
 		}
 
-		userIDStr := claims["user_id"].(string)
-		userID, err := primitive.ObjectIDFromHex(userIDStr)
+		userObjectID, err := primitive.ObjectIDFromHex(userID)
 		if err != nil {
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user ID"})
 			c.Abort()
 			return
 		}
 
-		c.Set("user_id", userID)
+		c.Set("user_id", userObjectID)
 		c.Next()
 	}
 }
@@ -55,7 +54,7 @@ func WebAuthRequired() gin.HandlerFunc {
 		}
 
 		// Use the integrated JWT validation
-		claims, err := utils.ValidateJWTToken(tokenString)
+		userID, err := utils.ValidateJWTToken(tokenString)
 		if err != nil {
 			log.Printf("🔐 Invalid token, clearing cookie and redirecting to login: %v", err)
 			// Clear invalid cookie
@@ -65,26 +64,17 @@ func WebAuthRequired() gin.HandlerFunc {
 			return
 		}
 
-		userIDStr, ok := claims["user_id"].(string)
-		if !ok {
-			log.Printf("🔐 No user_id in token claims")
-			c.SetCookie("token", "", -1, "/", "", false, true)
-			c.Redirect(http.StatusSeeOther, "/login")
-			c.Abort()
-			return
-		}
-
-		userID, err := primitive.ObjectIDFromHex(userIDStr)
+		userObjectID, err := primitive.ObjectIDFromHex(userID)
 		if err != nil {
-			log.Printf("🔐 Invalid user ID format: %s", userIDStr)
+			log.Printf("🔐 Invalid user ID format: %s", userID)
 			c.SetCookie("token", "", -1, "/", "", false, true)
 			c.Redirect(http.StatusSeeOther, "/login")
 			c.Abort()
 			return
 		}
 
-		log.Printf("✅ Web Authentication successful for user ID: %s", userID.Hex())
-		c.Set("user_id", userID)
+		log.Printf("✅ Web Authentication successful for user ID: %s", userObjectID.Hex())
+		c.Set("user_id", userObjectID)
 		c.Set("authenticated", true)
 		c.Next()
 	}
@@ -101,28 +91,21 @@ func WebAuthOptional() gin.HandlerFunc {
 		}
 
 		// Use the integrated JWT validation
-		claims, err := utils.ValidateJWTToken(tokenString)
+		userID, err := utils.ValidateJWTToken(tokenString)
 		if err != nil {
 			c.Set("authenticated", false)
 			c.Next()
 			return
 		}
 
-		userIDStr, ok := claims["user_id"].(string)
-		if !ok {
-			c.Set("authenticated", false)
-			c.Next()
-			return
-		}
-
-		userID, err := primitive.ObjectIDFromHex(userIDStr)
+		userObjectID, err := primitive.ObjectIDFromHex(userID)
 		if err != nil {
 			c.Set("authenticated", false)
 			c.Next()
 			return
 		}
 
-		c.Set("user_id", userID)
+		c.Set("user_id", userObjectID)
 		c.Set("authenticated", true)
 		c.Next()
 	}

@@ -1,15 +1,12 @@
 package main
 
 import (
-	"context"
 	"log"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
-	"go.mongodb.org/mongo-driver/bson"
 	"yelpcamp-go/config"
 	"yelpcamp-go/controllers"
 	"yelpcamp-go/middleware"
@@ -19,89 +16,38 @@ import (
 )
 
 func main() {
-	// Load environment variables first
+	// Load environment variables
 	if err := godotenv.Load(); err != nil {
-		log.Println("⚠️ Warning: .env file not found, will create one with generated secrets")
+		log.Printf("⚠️ Warning: .env file not found, using system environment variables")
 	}
 
-	// Auto-generate JWT secret if not present or too short
-	jwtSecret := utils.EnsureJWTSecret()
-	log.Printf("🔐 JWT Secret configured (%d characters) for %s environment", 
-		len(jwtSecret), utils.GetEnvironmentType())
+	// Ensure JWT secret is configured
+	if err := utils.EnsureJWTSecret(); err != nil {
+		log.Printf("❌ Failed to configure JWT secret: %v", err)
+		os.Exit(1)
+	}
 
-	// Set other required environment variables with defaults
-	setEnvDefault("MONGO_HOST", "localhost")
-	setEnvDefault("MONGO_PORT", "27017")
-	setEnvDefault("MONGO_DATABASE", "yelpcamp_dev")
-	setEnvDefault("PORT", "3000")
-	setEnvDefault("GIN_MODE", "debug")
-	setEnvDefault("UPLOAD_PATH", "./static/uploads")
-	setEnvDefault("MAX_UPLOAD_SIZE", "5242880")
+	// Initialize database connection
+	if err := config.ConnectDB(); err != nil {
+		log.Printf("❌ Failed to connect to database: %v", err)
+		os.Exit(1)
+	}
 
-	log.Println("🔗 Connecting to MongoDB...")
-	// Connect to MongoDB
-	config.ConnectMongoDB()
-	defer config.DisconnectMongoDB()
-
-	// Wait for MongoDB to be fully ready
-	log.Println("⏳ Waiting for MongoDB to be ready...")
-	time.Sleep(3 * time.Second)
-
-	// Test database connection
+	// Seed database with sample data
 	db := config.GetDB()
-	if db == nil {
-		log.Fatal("❌ Database connection failed")
-	}
-
-	// Test database operation with retry
-	maxRetries := 3
-	for i := 0; i < maxRetries; i++ {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		err := db.Client().Ping(ctx, nil)
-		cancel()
-		
-		if err == nil {
-			log.Println("✅ Database connection verified")
-			break
-		}
-		
-		if i == maxRetries-1 {
-			log.Fatalf("❌ Database ping failed after %d attempts: %v", maxRetries, err)
-		}
-		
-		log.Printf("⚠️ Database ping attempt %d failed, retrying...", i+1)
-		time.Sleep(2 * time.Second)
-	}
-
-	// Force clean and seed database
-	log.Println("🧹 Cleaning and seeding database...")
-	models.ForceSeedData()
-
-	// Verify seeding worked
-	campgroundCount, err := db.Collection("campgrounds").CountDocuments(context.Background(), bson.M{})
-	if err != nil {
-		log.Printf("⚠️ Warning: Could not verify campground count: %v", err)
-	} else {
-		log.Printf("✅ Database contains %d campgrounds", campgroundCount)
+	if err := models.SeedDatabase(db); err != nil {
+		log.Printf("⚠️ Warning: Failed to seed database: %v", err)
 	}
 
 	// Initialize Gin router
-	if utils.GetEnvironmentType() == "production" {
-		gin.SetMode(gin.ReleaseMode)
-	} else {
-		gin.SetMode(gin.DebugMode)
-	}
-	
-	router := gin.New()
-	router.Use(gin.Logger())
-	router.Use(gin.Recovery())
+	router := gin.Default()
 
 	// Add CORS middleware
-	router.Use(middleware.CORS())
+	router.Use(middleware.CORSMiddleware())
 
-	// Serve static files with proper headers
+	// Serve static files
 	router.Static("/static", "./static")
-	router.StaticFS("/uploads", http.Dir("./static/uploads"))
+	router.Static("/public", "./public")
 
 	// Load HTML templates
 	router.LoadHTMLGlob("templates/*")
@@ -109,57 +55,60 @@ func main() {
 	// Initialize controllers
 	authController := controllers.NewAuthController()
 	campgroundController := controllers.NewCampgroundController()
-	reviewController := controllers.NewReviewController()
 
-	// Setup routes
-	routes.SetupWebRoutes(router, authController, campgroundController, reviewController)
-	routes.SetupAPIRoutes(router)
-
-	// Root route - redirect to campgrounds
+	// Basic routes
 	router.GET("/", func(c *gin.Context) {
-		c.Redirect(http.StatusSeeOther, "/campgrounds")
+		c.HTML(http.StatusOK, "index.html", gin.H{
+			"title": "YelpCamp - Discover Amazing Campgrounds",
+		})
 	})
 
-	// Health check routes
+	// Health check endpoints
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"status":      "ok",
-			"message":     "YelpCamp Go Server is running",
-			"timestamp":   time.Now().Format("2006-01-02 15:04:05"),
-			"version":     "1.0.0",
-			"environment": utils.GetEnvironmentType(),
-			"campgrounds": campgroundCount,
-			"jwt_configured": len(os.Getenv("JWT_SECRET")) >= 32,
+			"status":    "healthy",
+			"timestamp": "2025-06-21T12:25:00Z",
+			"version":   "1.0.0",
+			"jwt_configured": os.Getenv("JWT_SECRET") != "",
 		})
 	})
 
-	// Debug endpoint (only in development)
-	if utils.GetEnvironmentType() == "development" {
-		router.GET("/debug", func(c *gin.Context) {
-			db := config.GetDB()
-			
-			campgroundCount, _ := db.Collection("campgrounds").CountDocuments(context.Background(), bson.M{})
-			userCount, _ := db.Collection("users").CountDocuments(context.Background(), bson.M{})
-			reviewCount, _ := db.Collection("reviews").CountDocuments(context.Background(), bson.M{})
-
-			// Get sample campgrounds
-			campgrounds, _ := models.FindAllCampgrounds(db)
-
-			c.JSON(http.StatusOK, gin.H{
-				"database_stats": gin.H{
-					"campgrounds": campgroundCount,
-					"users":       userCount,
-					"reviews":     reviewCount,
-				},
-				"sample_campgrounds": campgrounds,
-				"environment":        utils.GetEnvironmentType(),
-				"jwt_secret_length":  len(os.Getenv("JWT_SECRET")),
-				"auto_generated":     true,
-			})
+	router.GET("/api/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status": "API is running",
+			"database": "connected",
+			"jwt_configured": os.Getenv("JWT_SECRET") != "",
 		})
+	})
+
+	// API routes
+	api := router.Group("/api")
+	{
+		// Campgrounds API
+		api.GET("/campgrounds", campgroundController.GetAllCampgrounds)
+		api.GET("/campgrounds/:id", campgroundController.GetCampgroundByID)
+		
+		// Protected routes
+		protected := api.Group("/")
+		protected.Use(middleware.AuthRequired())
+		{
+			protected.POST("/campgrounds", campgroundController.CreateCampground)
+			protected.PUT("/campgrounds/:id", campgroundController.UpdateCampground)
+			protected.DELETE("/campgrounds/:id", campgroundController.DeleteCampground)
+		}
+
+		// Auth API routes
+		auth := api.Group("/auth")
+		{
+			auth.POST("/register", authController.Register)
+			auth.POST("/login", authController.Login)
+		}
 	}
 
-	// Start server
+	// Web routes
+	routes.SetupWebRoutes(router, authController, campgroundController)
+
+	// Get port from environment or default to 3000
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "3000"
@@ -167,25 +116,12 @@ func main() {
 
 	log.Printf("🚀 YelpCamp Go Server starting on port %s", port)
 	log.Printf("🌐 Frontend: http://localhost:%s", port)
-	log.Printf("📡 API: http://localhost:%s/health", port)
-	log.Printf("🏕️  Campgrounds: http://localhost:%s/campgrounds", port)
-	
-	if utils.GetEnvironmentType() == "development" {
-		log.Printf("🔍 Debug: http://localhost:%s/debug", port)
-		log.Println("")
-		log.Println("🔐 Demo Login Credentials:")
-		log.Println("   Username: igoswamik")
-		log.Println("   Password: password123")
-	}
+	log.Printf("📡 API: http://localhost:%s/api/health", port)
+	log.Printf("🏕️  Campgrounds: http://localhost:%s/api/campgrounds", port)
 
+	// Start server
 	if err := router.Run(":" + port); err != nil {
-		log.Fatalf("❌ Failed to start server: %v", err)
-	}
-}
-
-// setEnvDefault sets environment variable if not already set
-func setEnvDefault(key, defaultValue string) {
-	if os.Getenv(key) == "" {
-		os.Setenv(key, defaultValue)
+		log.Printf("❌ Failed to start server: %v", err)
+		os.Exit(1)
 	}
 }

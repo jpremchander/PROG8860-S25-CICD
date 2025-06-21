@@ -96,6 +96,11 @@ func saveToEnvFile(key, value string) error {
 
 // GenerateJWTToken generates a JWT token for a user
 func GenerateJWTToken(userID primitive.ObjectID) (string, error) {
+	// Ensure JWT secret is configured
+	if err := EnsureJWTSecret(); err != nil {
+		return "", err
+	}
+	
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
 		return "", fmt.Errorf("JWT_SECRET not configured")
@@ -105,20 +110,35 @@ func GenerateJWTToken(userID primitive.ObjectID) (string, error) {
 		"user_id": userID.Hex(),
 		"exp":     time.Now().Add(time.Hour * 24 * 7).Unix(), // 7 days
 		"iat":     time.Now().Unix(),
+		"iss":     "yelpcamp-go",
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString([]byte(jwtSecret))
+	signedToken, err := token.SignedString([]byte(jwtSecret))
+	
+	if err != nil {
+		log.Printf("❌ Error signing JWT token: %v", err)
+		return "", err
+	}
+	
+	log.Printf("✅ JWT token generated successfully for user: %s", userID.Hex())
+	return signedToken, nil
 }
 
 // ValidateJWTToken validates a JWT token and returns the user ID
 func ValidateJWTToken(tokenString string) (string, error) {
+	// Ensure JWT secret is configured
+	if err := EnsureJWTSecret(); err != nil {
+		return "", err
+	}
+	
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
 		return "", fmt.Errorf("JWT_SECRET not configured")
 	}
 
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		// Validate the signing method
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
 		}
@@ -126,15 +146,34 @@ func ValidateJWTToken(tokenString string) (string, error) {
 	})
 
 	if err != nil {
+		log.Printf("❌ JWT token parsing error: %v", err)
 		return "", err
 	}
 
-	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
-		if userID, ok := claims["user_id"].(string); ok {
-			return userID, nil
-		}
-		return "", fmt.Errorf("user_id not found in token")
+	if !token.Valid {
+		log.Printf("❌ JWT token is invalid")
+		return "", fmt.Errorf("invalid token")
 	}
 
-	return "", fmt.Errorf("invalid token")
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		log.Printf("❌ JWT token claims are invalid")
+		return "", fmt.Errorf("invalid token claims")
+	}
+
+	// Validate expiration
+	if exp, ok := claims["exp"].(float64); ok {
+		if time.Now().Unix() > int64(exp) {
+			log.Printf("❌ JWT token has expired")
+			return "", fmt.Errorf("token has expired")
+		}
+	}
+
+	// Extract user ID
+	if userID, ok := claims["user_id"].(string); ok {
+		log.Printf("✅ JWT token validated successfully for user: %s", userID)
+		return userID, nil
+	}
+
+	return "", fmt.Errorf("user_id not found in token claims")
 }

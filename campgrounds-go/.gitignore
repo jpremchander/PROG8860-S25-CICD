@@ -20,13 +20,10 @@ vendor/
 # Go workspace file
 go.work
 
-# Environment variables (if they contain real secrets)
+# Environment variables
+.env
 .env.local
 .env.*.local
-.env.production
-.env.staging
-
-# Note: .env is safe to commit since it only contains local dev values
 
 # IDE files
 .vscode/
@@ -62,3 +59,7 @@ node_modules/
 
 # MongoDB data
 data/
+
+# Coverage reports
+coverage.out
+coverage.html

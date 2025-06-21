@@ -160,8 +160,13 @@
                  data-date="{{.CreatedAt.Unix}}">
                 <div class="card campground-card h-100">
                     <div class="position-relative">
-                        {{if .Images}}
-                            <img src="{{(index .Images 0).URL}}" class="card-img-top" alt="{{.Title}}">
+                        {{if and .Images (gt (len .Images) 0)}}
+                            {{$firstImage := index .Images 0}}
+                            {{if $firstImage.URL}}
+                                <img src="{{$firstImage.URL}}" class="card-img-top" alt="{{.Title}}" onerror="this.src='https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=400&h=300&fit=crop'">
+                            {{else}}
+                                <img src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=400&h=300&fit=crop" class="card-img-top" alt="{{.Title}}">
+                            {{end}}
                         {{else}}
                             <img src="https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=400&h=300&fit=crop" class="card-img-top" alt="{{.Title}}">
                         {{end}}

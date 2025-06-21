@@ -20,7 +20,7 @@ import (
 func main() {
 	// Load environment variables
 	if err := godotenv.Load(); err != nil {
-		log.Println("No .env file found, using system environment variables")
+		log.Println("⚠️ Warning: .env file not found, using system environment variables")
 	}
 
 	log.Println("🔗 Connecting to MongoDB...")
@@ -48,155 +48,25 @@ func main() {
 	}
 	log.Println("✅ Database connection verified")
 
-	// ALWAYS force seed data for demo purposes
-	log.Println("🌱 Force seeding sample data for demo...")
+	// **FORCE SEED DATA ON STARTUP**
+	log.Println("🌱 Force seeding database with sample data...")
 	models.ForceSeedData()
 
-	// Verify seeding worked with detailed logging
-	count, err := db.Collection("campgrounds").CountDocuments(ctx, map[string]interface{}{})
-	if err != nil {
-		log.Printf("❌ Error checking campground count: %v", err)
-	} else {
-		log.Printf("📊 Total campgrounds in database: %d", count)
-		if count == 0 {
-			log.Println("⚠️ WARNING: No campgrounds found after seeding!")
-		}
-	}
-
 	// Initialize Gin router
-	router := gin.Default()
+	gin.SetMode(gin.DebugMode)
+	router := gin.New()
+	router.Use(gin.Logger())
+	router.Use(gin.Recovery())
 
-	// Load HTML templates
-	router.SetHTMLTemplate(template.Must(template.ParseGlob("templates/*")))
-
-	// Serve static files (including uploads)
-	router.Static("/static", "./static")
-	router.Static("/uploads", "./static/uploads")
-
-	// CORS middleware
+	// Add CORS middleware
 	router.Use(middleware.CORSMiddleware())
 
-	// Basic routes
-	router.GET("/", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "index.html", gin.H{
-			"title": "YelpCamp - Discover Amazing Campgrounds",
-		})
-	})
+	// Serve static files
+	router.Static("/static", "./static")
+	router.Static("/public", "./public")
 
-	router.GET("/health", func(c *gin.Context) {
-		// Test database connection
-		db := config.GetDB()
-		campgroundCount := int64(0)
-		userCount := int64(0)
-		
-		if db != nil {
-			count, err := db.Collection("campgrounds").CountDocuments(c.Request.Context(), map[string]interface{}{})
-			if err == nil {
-				campgroundCount = count
-			}
-			
-			uCount, err := db.Collection("users").CountDocuments(c.Request.Context(), map[string]interface{}{})
-			if err == nil {
-				userCount = uCount
-			}
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"status":      "healthy",
-			"message":     "YelpCamp Go server is running",
-			"campgrounds": campgroundCount,
-			"users":       userCount,
-			"timestamp":   time.Now().Format(time.RFC3339),
-		})
-	})
-
-	router.GET("/api/health", func(c *gin.Context) {
-		// Test database connection
-		db := config.GetDB()
-		campgroundCount := int64(0)
-		userCount := int64(0)
-		
-		if db != nil {
-			count, err := db.Collection("campgrounds").CountDocuments(c.Request.Context(), map[string]interface{}{})
-			if err == nil {
-				campgroundCount = count
-			}
-			
-			uCount, err := db.Collection("users").CountDocuments(c.Request.Context(), map[string]interface{}{})
-			if err == nil {
-				userCount = uCount
-			}
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"status":      "healthy",
-			"message":     "YelpCamp API is running",
-			"campgrounds": campgroundCount,
-			"users":       userCount,
-			"timestamp":   time.Now().Format(time.RFC3339),
-		})
-	})
-
-	// Enhanced API endpoint for campgrounds with better error handling
-	router.GET("/api/campgrounds", func(c *gin.Context) {
-		db := config.GetDB()
-		if db == nil {
-			log.Println("❌ Database connection is nil")
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":       "Database connection failed",
-				"campgrounds": nil,
-			})
-			return
-		}
-
-		log.Println("🔍 Fetching campgrounds from database...")
-		campgrounds, err := models.FindAllCampgrounds(db)
-		if err != nil {
-			log.Printf("❌ Error fetching campgrounds: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"error":       "Could not fetch campgrounds: " + err.Error(),
-				"campgrounds": nil,
-			})
-			return
-		}
-
-		log.Printf("✅ Successfully fetched %d campgrounds", len(campgrounds))
-		c.JSON(http.StatusOK, gin.H{
-			"campgrounds": campgrounds,
-			"count":       len(campgrounds),
-			"message":     "Campgrounds retrieved successfully",
-		})
-	})
-
-	// Debug endpoint to check database contents
-	router.GET("/debug/db", func(c *gin.Context) {
-		db := config.GetDB()
-		if db == nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Database connection failed"})
-			return
-		}
-
-		// Get collection stats
-		campgroundCount, _ := db.Collection("campgrounds").CountDocuments(c.Request.Context(), map[string]interface{}{})
-		userCount, _ := db.Collection("users").CountDocuments(c.Request.Context(), map[string]interface{}{})
-		reviewCount, _ := db.Collection("reviews").CountDocuments(c.Request.Context(), map[string]interface{}{})
-
-		// Get sample campgrounds
-		campgrounds, err := models.FindAllCampgrounds(db)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			return
-		}
-
-		c.JSON(http.StatusOK, gin.H{
-			"database_stats": gin.H{
-				"campgrounds": campgroundCount,
-				"users":       userCount,
-				"reviews":     reviewCount,
-			},
-			"sample_campgrounds": campgrounds,
-		})
-	})
+	// Load HTML templates
+	router.LoadHTMLGlob("templates/*")
 
 	// Initialize controllers
 	authController := controllers.NewAuthController()
@@ -207,18 +77,83 @@ func main() {
 	routes.SetupWebRoutes(router, authController, campgroundController, reviewController)
 	routes.SetupAPIRoutes(router, authController, campgroundController, reviewController)
 
-	// Get port from environment or default to 3000
+	// Root route - redirect to campgrounds
+	router.GET("/", func(c *gin.Context) {
+		c.Redirect(http.StatusSeeOther, "/campgrounds")
+	})
+
+	// Health check routes
+	router.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":    "ok",
+			"message":   "YelpCamp Go Server is running",
+			"timestamp": time.Now().Format("2006-01-02 15:04:05"),
+			"version":   "1.0.0",
+		})
+	})
+
+	router.GET("/api/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":    "ok",
+			"message":   "YelpCamp Go API is running",
+			"timestamp": time.Now().Format("2006-01-02"),
+			"version":   "1.0.0",
+		})
+	})
+
+	// Public API endpoints (no auth required)
+	router.GET("/api/campgrounds", func(c *gin.Context) {
+		db := config.GetDB()
+		campgrounds, err := models.FindAllCampgrounds(db)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch campgrounds"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"message":     "Campgrounds retrieved successfully",
+			"count":       len(campgrounds),
+			"campgrounds": campgrounds,
+		})
+	})
+
+	router.GET("/api/campgrounds/:id", func(c *gin.Context) {
+		campgroundController.GetByID(c)
+	})
+
+	// Debug endpoint to check database contents
+	router.GET("/debug/db", func(c *gin.Context) {
+		db := config.GetDB()
+		
+		// Count documents in each collection
+		campgroundCount, _ := db.Collection("campgrounds").CountDocuments(context.Background(), map[string]interface{}{})
+		userCount, _ := db.Collection("users").CountDocuments(context.Background(), map[string]interface{}{})
+		reviewCount, _ := db.Collection("reviews").CountDocuments(context.Background(), map[string]interface{}{})
+
+		// Get sample campgrounds
+		campgrounds, _ := models.FindAllCampgrounds(db)
+
+		c.JSON(http.StatusOK, gin.H{
+			"database_stats": gin.H{
+				"campgrounds": campgroundCount,
+				"users":       userCount,
+				"reviews":     reviewCount,
+			},
+			"sample_campgrounds": campgrounds,
+			"total_campgrounds":  len(campgrounds),
+		})
+	})
+
+	// Start server
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "3000"
 	}
 
-	log.Println("🚀 Starting YelpCamp Go Server...")
+	log.Printf("🚀 YelpCamp Go Server starting on port %s", port)
 	log.Printf("🌐 Frontend: http://localhost:%s", port)
-	log.Printf("📡 API Health: http://localhost:%s/api/health", port)
-	log.Printf("🏕️  Campgrounds API: http://localhost:%s/api/campgrounds", port)
-	log.Printf("🔍 Debug DB: http://localhost:%s/debug/db", port)
-	log.Printf("🗄️  MongoDB: Connected and seeded")
+	log.Printf("📡 API: http://localhost:%s/api/health", port)
+	log.Printf("🏕️  Campgrounds: http://localhost:%s/api/campgrounds", port)
 
 	if err := router.Run(":" + port); err != nil {
 		log.Fatalf("❌ Failed to start server: %v", err)

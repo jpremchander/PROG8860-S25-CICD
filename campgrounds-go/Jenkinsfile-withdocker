@@ -80,8 +80,8 @@ pipeline {
                                 docker --version
                                 docker-compose --version
                                 
-                                # Go version check removed - we use Go inside Docker containers
-                                echo "✅ Go will be available inside Docker containers"
+                                # Verify Go is available
+                                go version
                                 
                                 echo "✅ Environment setup completed"
                             '''

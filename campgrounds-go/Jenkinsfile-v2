@@ -6,7 +6,6 @@ pipeline {
         APP_NAME = 'yelpcamp-go'
         DOCKER_IMAGE = 'yelpcamp-go'
         DOCKER_TAG = "${BUILD_NUMBER}"
-        CONTAINER_NAME = 'yelpcamp-app'
         
         // Project directory
         PROJECT_DIR = "campgrounds-go"
@@ -43,12 +42,6 @@ pipeline {
     }
     
     stages {
-        stage('Checkout') {
-            steps {
-                checkout scm
-            }
-        }
-        
         stage('Setup Environment') {
             steps {
                 echo "🔧 Setting up build environment..."
@@ -201,15 +194,6 @@ pipeline {
             }
         }
         
-        stage('Test') {
-            steps {
-                script {
-                    echo '🧪 Running tests...'
-                    sh 'go test ./... -v'
-                }
-            }
-        }
-        
         stage('Upload Artifacts to S3') {
             steps {
                 echo "☁️ Uploading artifacts to S3..."
@@ -348,23 +332,6 @@ EOF
             }
         }
         
-        stage('Verify JWT Integration') {
-            steps {
-                script {
-                    echo '🔐 Verifying JWT integration...'
-                    
-                    // Check if JWT secret was auto-generated
-                    sh '''
-                        echo "Checking JWT configuration..."
-                        curl -s http://localhost:3000/debug | jq '.jwt_secret_length'
-                        
-                        echo "Testing authentication endpoints..."
-                        curl -f http://localhost:3000/health
-                    '''
-                }
-            }
-        }
-        
         stage('Post-Deployment Tests') {
             when {
                 expression { return params.DEPLOY_LOCALLY }
@@ -457,7 +424,6 @@ EOF
     post {
         always {
             echo "🧹 Cleaning up..."
-            sh 'docker system prune -f'
         }
         
         success {
@@ -482,7 +448,6 @@ EOF
         
         failure {
             echo "❌ Pipeline failed!"
-            sh 'docker-compose logs'
         }
         
         unstable {

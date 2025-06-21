@@ -72,6 +72,12 @@ func SeedData() {
 			Email:    "alice@yelpcamp.com",
 			Password: "password123",
 		},
+		{
+			ID:       primitive.NewObjectID(),
+			Username: "charlie",
+			Email:    "charlie@yelpcamp.com",
+			Password: "password123",
+		},
 	}
 	
 	// Insert users directly
@@ -106,20 +112,54 @@ func SeedData() {
 	
 	log.Printf("✅ Successfully created %d users", len(userIDs))
 	
-	// Create sample campgrounds with realistic data
+	// Create sample campgrounds with high-quality images
 	campgrounds := []Campground{
 		{
 			ID:          primitive.NewObjectID(),
 			Title:       "Redwood National Park",
-			Description: "Experience the majesty of the world's tallest trees in this pristine wilderness setting. Perfect for hiking, photography, and connecting with nature.",
+			Description: "Experience the majesty of the world's tallest trees in this pristine wilderness setting. Perfect for hiking, photography, and connecting with nature among ancient giants.",
 			Location:    "Crescent City, California",
-			Price:       25.00,
+			Price:       45.00,
 			AuthorID:    userIDs[0], // igoswamik
 			Images: []Image{
 				{
 					URL:      "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&h=600&fit=crop&crop=center",
-					Filename: "redwood-1.jpg",
+					Filename: "redwood-forest.jpg",
 					Key:      "yelpcamp/redwood-1",
+				},
+			},
+			CreatedAt: time.Now().AddDate(0, 0, -15),
+			UpdatedAt: time.Now().AddDate(0, 0, -15),
+		},
+		{
+			ID:          primitive.NewObjectID(),
+			Title:       "Grand Canyon South Rim",
+			Description: "Wake up to breathtaking views of one of the world's natural wonders. This campground offers unparalleled sunrise and sunset viewing opportunities with full amenities.",
+			Location:    "Grand Canyon, Arizona",
+			Price:       55.00,
+			AuthorID:    userIDs[1], // hannah
+			Images: []Image{
+				{
+					URL:      "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop&crop=center",
+					Filename: "grand-canyon-view.jpg",
+					Key:      "yelpcamp/grand-canyon-1",
+				},
+			},
+			CreatedAt: time.Now().AddDate(0, 0, -12),
+			UpdatedAt: time.Now().AddDate(0, 0, -12),
+		},
+		{
+			ID:          primitive.NewObjectID(),
+			Title:       "Yellowstone Lake Lodge",
+			Description: "Camp beside the pristine waters of Yellowstone Lake with opportunities for fishing, boating, and wildlife viewing. Hot springs nearby for a relaxing soak!",
+			Location:    "Yellowstone National Park, Wyoming",
+			Price:       60.00,
+			AuthorID:    userIDs[2], // bob
+			Images: []Image{
+				{
+					URL:      "https://images.unsplash.com/photo-1504851149312-7a075b496cc7?w=800&h=600&fit=crop&crop=center",
+					Filename: "yellowstone-lake.jpg",
+					Key:      "yelpcamp/yellowstone-1",
 				},
 			},
 			CreatedAt: time.Now().AddDate(0, 0, -10),
@@ -127,16 +167,16 @@ func SeedData() {
 		},
 		{
 			ID:          primitive.NewObjectID(),
-			Title:       "Grand Canyon South Rim",
-			Description: "Wake up to breathtaking views of one of the world's natural wonders. This campground offers unparalleled sunrise and sunset viewing opportunities.",
-			Location:    "Grand Canyon, Arizona",
-			Price:       35.00,
-			AuthorID:    userIDs[1], // hannah
+			Title:       "Yosemite Valley Floor",
+			Description: "Camp in the heart of Yosemite Valley with iconic views of El Capitan and Half Dome. Rock climbing and hiking trails accessible directly from camp.",
+			Location:    "Yosemite National Park, California",
+			Price:       65.00,
+			AuthorID:    userIDs[3], // alice
 			Images: []Image{
 				{
-					URL:      "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop&crop=center",
-					Filename: "grand-canyon-1.jpg",
-					Key:      "yelpcamp/grand-canyon-1",
+					URL:      "https://images.unsplash.com/photo-1506197603052-3cc9c3a201bd?w=800&h=600&fit=crop&crop=center",
+					Filename: "yosemite-valley.jpg",
+					Key:      "yelpcamp/yosemite-1",
 				},
 			},
 			CreatedAt: time.Now().AddDate(0, 0, -8),
@@ -144,16 +184,16 @@ func SeedData() {
 		},
 		{
 			ID:          primitive.NewObjectID(),
-			Title:       "Yellowstone Lake Lodge",
-			Description: "Camp beside the pristine waters of Yellowstone Lake with opportunities for fishing, boating, and wildlife viewing. Hot springs nearby!",
-			Location:    "Yellowstone National Park, Wyoming",
-			Price:       40.00,
-			AuthorID:    userIDs[2], // bob
+			Title:       "Glacier Point Overlook",
+			Description: "Spectacular mountain camping with panoramic views of snow-capped peaks and alpine lakes. Perfect for stargazing and photography enthusiasts.",
+			Location:    "Glacier National Park, Montana",
+			Price:       50.00,
+			AuthorID:    userIDs[4], // charlie
 			Images: []Image{
 				{
-					URL:      "https://images.unsplash.com/photo-1504851149312-7a075b496cc7?w=800&h=600&fit=crop&crop=center",
-					Filename: "yellowstone-1.jpg",
-					Key:      "yelpcamp/yellowstone-1",
+					URL:      "https://images.unsplash.com/photo-1445308394109-4ec2920981b1?w=800&h=600&fit=crop&crop=center",
+					Filename: "glacier-mountains.jpg",
+					Key:      "yelpcamp/glacier-1",
 				},
 			},
 			CreatedAt: time.Now().AddDate(0, 0, -6),
@@ -161,16 +201,16 @@ func SeedData() {
 		},
 		{
 			ID:          primitive.NewObjectID(),
-			Title:       "Yosemite Valley Floor",
-			Description: "Camp in the heart of Yosemite Valley with iconic views of El Capitan and Half Dome. Rock climbing and hiking trails accessible from camp.",
-			Location:    "Yosemite National Park, California",
-			Price:       45.00,
-			AuthorID:    userIDs[3], // alice
+			Title:       "Zion Canyon Riverside",
+			Description: "Camp along the Virgin River with towering red rock formations surrounding you. Easy access to hiking trails and the famous Narrows hike.",
+			Location:    "Zion National Park, Utah",
+			Price:       48.00,
+			AuthorID:    userIDs[0], // igoswamik
 			Images: []Image{
 				{
-					URL:      "https://images.unsplash.com/photo-1506197603052-3cc9c3a201bd?w=800&h=600&fit=crop&crop=center",
-					Filename: "yosemite-1.jpg",
-					Key:      "yelpcamp/yosemite-1",
+					URL:      "https://images.unsplash.com/photo-1487730116645-74489c95b41b?w=800&h=600&fit=crop&crop=center",
+					Filename: "zion-canyon.jpg",
+					Key:      "yelpcamp/zion-1",
 				},
 			},
 			CreatedAt: time.Now().AddDate(0, 0, -4),
@@ -178,16 +218,16 @@ func SeedData() {
 		},
 		{
 			ID:          primitive.NewObjectID(),
-			Title:       "Glacier Point Overlook",
-			Description: "Spectacular mountain camping with panoramic views of snow-capped peaks and alpine lakes. Perfect for stargazing and photography.",
-			Location:    "Glacier National Park, Montana",
-			Price:       30.00,
-			AuthorID:    userIDs[0], // igoswamik
+			Title:       "Arches National Park",
+			Description: "Unique desert camping experience surrounded by natural stone arches and formations. Incredible night sky viewing with minimal light pollution.",
+			Location:    "Moab, Utah",
+			Price:       42.00,
+			AuthorID:    userIDs[1], // hannah
 			Images: []Image{
 				{
-					URL:      "https://images.unsplash.com/photo-1445308394109-4ec2920981b1?w=800&h=600&fit=crop&crop=center",
-					Filename: "glacier-1.jpg",
-					Key:      "yelpcamp/glacier-1",
+					URL:      "https://images.unsplash.com/photo-1434394354979-a235cd36269d?w=800&h=600&fit=crop&crop=center",
+					Filename: "arches-desert.jpg",
+					Key:      "yelpcamp/arches-1",
 				},
 			},
 			CreatedAt: time.Now().AddDate(0, 0, -2),
@@ -195,16 +235,16 @@ func SeedData() {
 		},
 		{
 			ID:          primitive.NewObjectID(),
-			Title:       "Zion Canyon Riverside",
-			Description: "Camp along the Virgin River with towering red rock formations surrounding you. Easy access to hiking trails and the famous Narrows.",
-			Location:    "Zion National Park, Utah",
-			Price:       32.00,
-			AuthorID:    userIDs[1], // hannah
+			Title:       "Olympic Peninsula Rainforest",
+			Description: "Immerse yourself in the lush temperate rainforest of the Olympic Peninsula. Moss-covered trees and pristine streams create a magical atmosphere.",
+			Location:    "Olympic National Park, Washington",
+			Price:       38.00,
+			AuthorID:    userIDs[2], // bob
 			Images: []Image{
 				{
-					URL:      "https://images.unsplash.com/photo-1487730116645-74489c95b41b?w=800&h=600&fit=crop&crop=center",
-					Filename: "zion-1.jpg",
-					Key:      "yelpcamp/zion-1",
+					URL:      "https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=800&h=600&fit=crop&crop=center",
+					Filename: "olympic-rainforest.jpg",
+					Key:      "yelpcamp/olympic-1",
 				},
 			},
 			CreatedAt: time.Now().AddDate(0, 0, -1),
@@ -239,7 +279,7 @@ func SeedData() {
 			{
 				ID:           primitive.NewObjectID(),
 				Rating:       5,
-				Body:         "Absolutely breathtaking! The redwoods are magnificent and the campground is well-maintained.",
+				Body:         "Absolutely breathtaking! The redwoods are magnificent and the campground is well-maintained. Perfect for families.",
 				AuthorID:     userIDs[1], // hannah
 				CampgroundID: campgroundIDs[0], // Redwood
 				CreatedAt:    time.Now().AddDate(0, 0, -5),
@@ -248,7 +288,7 @@ func SeedData() {
 			{
 				ID:           primitive.NewObjectID(),
 				Rating:       5,
-				Body:         "Best camping experience ever! The sunrise over the canyon was unforgettable.",
+				Body:         "Best camping experience ever! The sunrise over the canyon was unforgettable. Highly recommend!",
 				AuthorID:     userIDs[0], // igoswamik
 				CampgroundID: campgroundIDs[1], // Grand Canyon
 				CreatedAt:    time.Now().AddDate(0, 0, -4),
@@ -257,11 +297,20 @@ func SeedData() {
 			{
 				ID:           primitive.NewObjectID(),
 				Rating:       4,
-				Body:         "Great location with amazing wildlife viewing opportunities. Saw elk and bison!",
+				Body:         "Great location with amazing wildlife viewing opportunities. Saw elk and bison! Clean facilities.",
 				AuthorID:     userIDs[2], // bob
 				CampgroundID: campgroundIDs[2], // Yellowstone
 				CreatedAt:    time.Now().AddDate(0, 0, -3),
 				UpdatedAt:    time.Now().AddDate(0, 0, -3),
+			},
+			{
+				ID:           primitive.NewObjectID(),
+				Rating:       5,
+				Body:         "Yosemite never disappoints! The views of Half Dome from the campsite are incredible. Will definitely return.",
+				AuthorID:     userIDs[3], // alice
+				CampgroundID: campgroundIDs[3], // Yosemite
+				CreatedAt:    time.Now().AddDate(0, 0, -2),
+				UpdatedAt:    time.Now().AddDate(0, 0, -2),
 			},
 		}
 		
@@ -272,7 +321,7 @@ func SeedData() {
 				log.Printf("❌ Error creating review: %v", err)
 				continue
 			}
-			log.Printf("✅ Created review for campground: %s", campgroundIDs[i%len(campgroundIDs)].Hex())
+			log.Printf("✅ Created review for campground")
 		}
 		log.Printf("✅ Successfully created %d reviews", len(reviews))
 	}

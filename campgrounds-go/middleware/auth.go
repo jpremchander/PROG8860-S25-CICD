@@ -1,13 +1,13 @@
 package middleware
 
 import (
+	"log"
 	"net/http"
-	"os"
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v4"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"yelpcamp-go/utils"
 )
 
 func AuthRequired() gin.HandlerFunc {
@@ -21,24 +21,11 @@ func AuthRequired() gin.HandlerFunc {
 
 		tokenString := strings.Replace(authHeader, "Bearer ", "", 1)
 		
-		jwtSecret := os.Getenv("JWT_SECRET")
-		if jwtSecret == "" {
-			jwtSecret = "your_super_secret_jwt_key_here"
-		}
-		
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			return []byte(jwtSecret), nil
-		})
-
-		if err != nil || !token.Valid {
+		// Use the integrated JWT validation
+		claims, err := utils.ValidateJWTToken(tokenString)
+		if err != nil {
+			log.Printf("❌ API Auth failed: %v", err)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
-			c.Abort()
-			return
-		}
-
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token claims"})
 			c.Abort()
 			return
 		}
@@ -61,30 +48,17 @@ func WebAuthRequired() gin.HandlerFunc {
 		// Check for JWT token in cookie
 		tokenString, err := c.Cookie("token")
 		if err != nil {
+			log.Printf("🔐 No token cookie found, redirecting to login")
 			c.Redirect(http.StatusSeeOther, "/login")
 			c.Abort()
 			return
 		}
 
-		jwtSecret := os.Getenv("JWT_SECRET")
-		if jwtSecret == "" {
-			jwtSecret = "your_super_secret_jwt_key_here"
-		}
-
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			return []byte(jwtSecret), nil
-		})
-
-		if err != nil || !token.Valid {
+		// Use the integrated JWT validation
+		claims, err := utils.ValidateJWTToken(tokenString)
+		if err != nil {
+			log.Printf("🔐 Invalid token, clearing cookie and redirecting to login: %v", err)
 			// Clear invalid cookie
-			c.SetCookie("token", "", -1, "/", "", false, true)
-			c.Redirect(http.StatusSeeOther, "/login")
-			c.Abort()
-			return
-		}
-
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
 			c.SetCookie("token", "", -1, "/", "", false, true)
 			c.Redirect(http.StatusSeeOther, "/login")
 			c.Abort()
@@ -93,6 +67,7 @@ func WebAuthRequired() gin.HandlerFunc {
 
 		userIDStr, ok := claims["user_id"].(string)
 		if !ok {
+			log.Printf("🔐 No user_id in token claims")
 			c.SetCookie("token", "", -1, "/", "", false, true)
 			c.Redirect(http.StatusSeeOther, "/login")
 			c.Abort()
@@ -101,12 +76,14 @@ func WebAuthRequired() gin.HandlerFunc {
 
 		userID, err := primitive.ObjectIDFromHex(userIDStr)
 		if err != nil {
+			log.Printf("🔐 Invalid user ID format: %s", userIDStr)
 			c.SetCookie("token", "", -1, "/", "", false, true)
 			c.Redirect(http.StatusSeeOther, "/login")
 			c.Abort()
 			return
 		}
 
+		log.Printf("✅ Web Authentication successful for user ID: %s", userID.Hex())
 		c.Set("user_id", userID)
 		c.Set("authenticated", true)
 		c.Next()
@@ -123,23 +100,9 @@ func WebAuthOptional() gin.HandlerFunc {
 			return
 		}
 
-		jwtSecret := os.Getenv("JWT_SECRET")
-		if jwtSecret == "" {
-			jwtSecret = "your_super_secret_jwt_key_here"
-		}
-
-		token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-			return []byte(jwtSecret), nil
-		})
-
-		if err != nil || !token.Valid {
-			c.Set("authenticated", false)
-			c.Next()
-			return
-		}
-
-		claims, ok := token.Claims.(jwt.MapClaims)
-		if !ok {
+		// Use the integrated JWT validation
+		claims, err := utils.ValidateJWTToken(tokenString)
+		if err != nil {
 			c.Set("authenticated", false)
 			c.Next()
 			return

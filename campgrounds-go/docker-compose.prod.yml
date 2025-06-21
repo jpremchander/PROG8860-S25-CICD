@@ -9,7 +9,7 @@ services:
       - "3000:3000"
     environment:
       - GIN_MODE=release
-      - MONGO_HOST=mongo
+      - MONGO_HOST=mongodb
       - MONGO_PORT=27017
       - MONGO_USER=yelpcamp_prod
       - MONGO_PASSWORD=${MONGO_PASSWORD:-prod_secure_password_123}
@@ -18,8 +18,12 @@ services:
       - CLOUDINARY_CLOUD_NAME=${CLOUDINARY_CLOUD_NAME}
       - CLOUDINARY_API_KEY=${CLOUDINARY_API_KEY}
       - CLOUDINARY_API_SECRET=${CLOUDINARY_API_SECRET}
+      - PORT=3000
+      - ENVIRONMENT=production
+      - UPLOAD_PATH=./static/uploads
+      - MAX_UPLOAD_SIZE=5242880
     depends_on:
-      mongo:
+      mongodb:
         condition: service_healthy
     restart: unless-stopped
     deploy:
@@ -34,38 +38,36 @@ services:
     networks:
       - yelpcamp-network
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
-
-  mongo:
-    image: mongo:7.0
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=yelpcamp_prod
-      - MONGO_INITDB_ROOT_PASSWORD=${MONGO_PASSWORD:-prod_secure_password_123}
-      - MONGO_INITDB_DATABASE=yelpcamp_prod
     volumes:
-      - mongo_prod_data:/data/db
+      - ./static/uploads:/app/static/uploads
+      - ./.env.prod:/app/.env  # Separate .env for production
+
+  mongodb:
+    image: mongo:7.0
+    container_name: yelpcamp_mongo_prod
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASSWORD:-secure_password_123}
+      MONGO_INITDB_DATABASE: yelpcamp_prod
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_prod_data:/data/db
       - ./scripts/mongo-init-prod.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    networks:
+      - yelpcamp-network
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
       interval: 10s
       timeout: 5s
       retries: 5
       start_period: 30s
-    restart: unless-stopped
-    deploy:
-      resources:
-        limits:
-          cpus: '1'
-          memory: 1G
-        reservations:
-          cpus: '0.5'
-          memory: 512M
-    networks:
-      - yelpcamp-network
 
   postgres:
     image: postgres:15-alpine
@@ -101,7 +103,7 @@ services:
       - yelpcamp-network
 
 volumes:
-  mongo_prod_data:
+  mongodb_prod_data:
   postgres_prod_data:
 
 networks:

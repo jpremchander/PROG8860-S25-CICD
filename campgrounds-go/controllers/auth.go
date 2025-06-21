@@ -1,6 +1,7 @@
 package controllers
 
 import (
+	"log"
 	"net/http"
 	"os"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"yelpcamp-go/config"
 	"yelpcamp-go/models"
+	"yelpcamp-go/utils"
 )
 
 type AuthController struct{}
@@ -51,7 +53,7 @@ func (ac *AuthController) Register(c *gin.Context) {
 		return
 	}
 
-	token, err := generateToken(user.ID)
+	token, err := utils.GenerateJWTToken(user.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate token"})
 		return
@@ -64,11 +66,13 @@ func (ac *AuthController) Register(c *gin.Context) {
 	})
 }
 
-// Web Registration - Fixed
+// Web Registration - Integrated with auto JWT
 func (ac *AuthController) RegisterWeb(c *gin.Context) {
 	username := c.PostForm("username")
 	email := c.PostForm("email")
 	password := c.PostForm("password")
+
+	log.Printf("🔐 Registration attempt - Username: %s, Email: %s", username, email)
 
 	if username == "" || email == "" || password == "" {
 		c.HTML(http.StatusBadRequest, "register.html", gin.H{
@@ -96,6 +100,7 @@ func (ac *AuthController) RegisterWeb(c *gin.Context) {
 	}
 
 	if err := user.Create(db); err != nil {
+		log.Printf("❌ Error creating user: %v", err)
 		c.HTML(http.StatusInternalServerError, "register.html", gin.H{
 			"title": "Register - YelpCamp",
 			"error": "Could not create user",
@@ -103,14 +108,18 @@ func (ac *AuthController) RegisterWeb(c *gin.Context) {
 		return
 	}
 
-	token, err := generateToken(user.ID)
+	// Use the integrated JWT generation
+	token, err := utils.GenerateJWTToken(user.ID)
 	if err != nil {
+		log.Printf("❌ Error generating token: %v", err)
 		c.HTML(http.StatusInternalServerError, "register.html", gin.H{
 			"title": "Register - YelpCamp",
 			"error": "Could not generate token",
 		})
 		return
 	}
+
+	log.Printf("✅ User registered successfully: %s", username)
 
 	// Set secure cookie with proper settings
 	c.SetSameSite(http.SameSiteLaxMode)
@@ -141,7 +150,8 @@ func (ac *AuthController) Login(c *gin.Context) {
 		return
 	}
 
-	token, err := generateToken(user.ID)
+	// Use the integrated JWT generation
+	token, err := utils.GenerateJWTToken(user.ID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate token"})
 		return
@@ -154,12 +164,15 @@ func (ac *AuthController) Login(c *gin.Context) {
 	})
 }
 
-// Web Login - Fixed
+// Web Login - Integrated with auto JWT
 func (ac *AuthController) LoginWeb(c *gin.Context) {
 	username := c.PostForm("username")
 	password := c.PostForm("password")
 
+	log.Printf("🔐 Login attempt - Username: %s", username)
+
 	if username == "" || password == "" {
+		log.Printf("❌ Login failed - Missing credentials")
 		c.HTML(http.StatusBadRequest, "login.html", gin.H{
 			"title": "Login - YelpCamp",
 			"error": "Username and password are required",
@@ -170,6 +183,7 @@ func (ac *AuthController) LoginWeb(c *gin.Context) {
 	db := config.GetDB()
 	user, err := models.FindUserByUsername(db, username)
 	if err != nil {
+		log.Printf("❌ Login failed - User not found: %s", username)
 		c.HTML(http.StatusUnauthorized, "login.html", gin.H{
 			"title": "Login - YelpCamp",
 			"error": "Invalid username or password",
@@ -178,6 +192,7 @@ func (ac *AuthController) LoginWeb(c *gin.Context) {
 	}
 
 	if err := user.CheckPassword(password); err != nil {
+		log.Printf("❌ Login failed - Invalid password for user: %s", username)
 		c.HTML(http.StatusUnauthorized, "login.html", gin.H{
 			"title": "Login - YelpCamp",
 			"error": "Invalid username or password",
@@ -185,8 +200,10 @@ func (ac *AuthController) LoginWeb(c *gin.Context) {
 		return
 	}
 
-	token, err := generateToken(user.ID)
+	// Use the integrated JWT generation
+	token, err := utils.GenerateJWTToken(user.ID)
 	if err != nil {
+		log.Printf("❌ Login failed - Token generation error: %v", err)
 		c.HTML(http.StatusInternalServerError, "login.html", gin.H{
 			"title": "Login - YelpCamp",
 			"error": "Could not generate token",
@@ -194,9 +211,13 @@ func (ac *AuthController) LoginWeb(c *gin.Context) {
 		return
 	}
 
+	log.Printf("✅ Login successful for user: %s (ID: %s)", username, user.ID.Hex())
+
 	// Set secure cookie with proper settings
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("token", token, 3600*24*7, "/", "", false, true) // 7 days, httpOnly
+	
+	log.Printf("🍪 Cookie set for user: %s", username)
 	
 	// Redirect to campgrounds page
 	c.Redirect(http.StatusSeeOther, "/campgrounds")
@@ -204,23 +225,9 @@ func (ac *AuthController) LoginWeb(c *gin.Context) {
 
 // Logout
 func (ac *AuthController) Logout(c *gin.Context) {
+	log.Printf("🚪 User logging out")
 	// Clear the cookie
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("token", "", -1, "/", "", false, true)
 	c.Redirect(http.StatusSeeOther, "/")
-}
-
-func generateToken(userID primitive.ObjectID) (string, error) {
-	claims := jwt.MapClaims{
-		"user_id": userID.Hex(),
-		"exp":     time.Now().Add(time.Hour * 24 * 7).Unix(), // 7 days
-		"iat":     time.Now().Unix(),
-	}
-
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		jwtSecret = "your_super_secret_jwt_key_here" // fallback
-	}
-	return token.SignedString([]byte(jwtSecret))
 }

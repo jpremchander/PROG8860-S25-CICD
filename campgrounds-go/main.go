@@ -47,9 +47,29 @@ func main() {
 	}
 	log.Println("✅ Database connection verified")
 
-	// **FORCE SEED DATA ON STARTUP**
-	log.Println("🌱 Force seeding database with sample data...")
-	models.ForceSeedData()
+	// Check if we need to seed data
+	campgroundCount, err := db.Collection("campgrounds").CountDocuments(context.Background(), map[string]interface{}{})
+	if err != nil {
+		log.Printf("⚠️ Warning: Could not check campground count: %v", err)
+	}
+	
+	log.Printf("📊 Current campgrounds in database: %d", campgroundCount)
+	
+	// Only seed if no campgrounds exist
+	if campgroundCount == 0 {
+		log.Println("🌱 No campgrounds found, seeding database...")
+		models.ForceSeedData()
+		
+		// Verify seeding worked
+		newCount, err := db.Collection("campgrounds").CountDocuments(context.Background(), map[string]interface{}{})
+		if err != nil {
+			log.Printf("⚠️ Warning: Could not verify seeding: %v", err)
+		} else {
+			log.Printf("✅ After seeding: %d campgrounds", newCount)
+		}
+	} else {
+		log.Printf("✅ Found %d existing campgrounds, skipping seeding", campgroundCount)
+	}
 
 	// Initialize Gin router
 	gin.SetMode(gin.DebugMode)
@@ -105,10 +125,12 @@ func main() {
 		db := config.GetDB()
 		campgrounds, err := models.FindAllCampgrounds(db)
 		if err != nil {
+			log.Printf("❌ Error fetching campgrounds: %v", err)
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch campgrounds"})
 			return
 		}
 
+		log.Printf("📊 API returning %d campgrounds", len(campgrounds))
 		c.JSON(http.StatusOK, gin.H{
 			"message":     "Campgrounds retrieved successfully",
 			"count":       len(campgrounds),

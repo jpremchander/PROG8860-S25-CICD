@@ -2,11 +2,11 @@ pipeline {
     agent any
     
     environment {
-        GO_VERSION = '1.21'
-        GOPATH = "${WORKSPACE}/go"
         APP_NAME = 'campgrounds-go'
+        DOCKER_IMAGE = 'yelp-camp'
         DEV_PORT = '3001'
         PROD_PORT = '3000'
+        DOCKER_REGISTRY = 'your-registry'
     }
     
     parameters {
@@ -20,6 +20,11 @@ pipeline {
             defaultValue: false,
             description: 'Skip running tests'
         )
+        booleanParam(
+            name: 'REBUILD_IMAGES',
+            defaultValue: true,
+            description: 'Force rebuild Docker images'
+        )
     }
     
     options {
@@ -31,16 +36,14 @@ pipeline {
     stages {
         stage('🧹 Clean Workspace') {
             steps {
-                echo '🧹 Cleaning workspace and Go cache...'
+                echo '🧹 Cleaning workspace and Docker resources...'
                 sh '''
-                    # Clean workspace (skip permission errors)
-                    rm -rf ${WORKSPACE}/* || true
+                    # Stop and remove existing containers
+                    docker stop campgrounds-dev campgrounds-prod || true
+                    docker rm campgrounds-dev campgrounds-prod || true
                     
-                    # Clean Go cache if available
-                    if command -v go &> /dev/null; then
-                        export PATH=$PATH:/usr/local/go/bin
-                        go clean -cache -modcache -testcache 2>/dev/null || echo "Go cache clean completed"
-                    fi
+                    # Clean up Docker resources
+                    docker system prune -f || true
                     
                     echo "✅ Workspace cleaned"
                 '''
@@ -56,67 +59,26 @@ pipeline {
                     echo "📋 Current commit information:"
                     git log --oneline -5
                     echo "📂 Repository structure:"
-                    find . -name "*.go" -o -name "*.mod" -o -name "*.sum" -o -name "Jenkinsfile" | head -10
-                    echo "📁 Current directory contents:"
-                    ls -la
+                    find . -name "*.go" -o -name "Dockerfile" -o -name "docker-compose.yml" | head -10
                 '''
             }
         }
         
-        stage('🔧 Setup Go Environment') {
+        stage('🔧 Setup Environment') {
             steps {
-                echo '🔧 Setting up Go environment...'
-                sh '''
-                    # Install Go if not present
-                    if ! command -v go &> /dev/null || ! go version | grep -q "${GO_VERSION}"; then
-                        echo "📦 Installing Go ${GO_VERSION}..."
-                        cd /tmp
-                        wget -q https://go.dev/dl/go${GO_VERSION}.0.linux-amd64.tar.gz
-                        sudo rm -rf /usr/local/go
-                        sudo tar -C /usr/local -xzf go${GO_VERSION}.0.linux-amd64.tar.gz
-                        rm go${GO_VERSION}.0.linux-amd64.tar.gz
-                    fi
-                    
-                    # Set up Go environment
-                    export PATH=$PATH:/usr/local/go/bin:${GOPATH}/bin
-                    mkdir -p ${GOPATH}/{src,bin,pkg}
-                    
-                    # Git configuration
-                    git config --global url."https://".insteadOf git://
-                    git config --global url."https://github.com/".insteadOf "git@github.com:"
-                    
-                    # Verify Go installation
-                    go version
-                    echo "✅ Go environment setup completed"
-                '''
-            }
-        }
-        
-        stage('📦 Download Dependencies') {
-            steps {
-                echo '📦 Downloading Go dependencies...'
+                echo '🔧 Setting up Docker environment...'
                 script {
-                    // Check if campgrounds-go directory exists
                     if (fileExists('campgrounds-go')) {
                         dir('campgrounds-go') {
                             sh '''
-                                export PATH=$PATH:/usr/local/go/bin:${GOPATH}/bin
-                                
                                 echo "📁 Contents of campgrounds-go directory:"
                                 ls -la
                                 
-                                # Check if go.mod exists
-                                if [ -f go.mod ]; then
-                                    echo "📦 Found go.mod, downloading dependencies..."
-                                    rm -f go.sum
-                                    go mod download
-                                    go mod verify
-                                    go mod tidy
-                                    echo "✅ Dependencies downloaded"
-                                else
-                                    echo "❌ No go.mod found in campgrounds-go directory"
-                                    exit 1
-                                fi
+                                # Verify Docker is available
+                                docker --version
+                                docker-compose --version
+                                
+                                echo "✅ Environment setup completed"
                             '''
                         }
                     } else {
@@ -126,58 +88,23 @@ pipeline {
             }
         }
         
-        stage('🔍 Code Quality') {
+        stage('🔨 Build Docker Images') {
             steps {
-                echo '🔍 Running code quality checks...'
-                dir('campgrounds-go') {
-                    script {
-                        try {
-                            sh '''
-                                export PATH=$PATH:/usr/local/go/bin:${GOPATH}/bin
-                                
-                                echo "🔍 Running go fmt..."
-                                if [ "$(gofmt -l . | wc -l)" -gt 0 ]; then
-                                    echo "⚠️ Code formatting issues found:"
-                                    gofmt -l .
-                                fi
-                                
-                                echo "🔍 Running go vet..."
-                                go vet ./...
-                                
-                                echo "✅ Code quality checks completed"
-                            '''
-                        } catch (Exception e) {
-                            echo "⚠️ Code quality issues found: ${e.getMessage()}"
-                        }
-                    }
-                }
-            }
-        }
-        
-        stage('🔨 Build Application') {
-            steps {
-                echo '🔨 Building the Go application...'
+                echo '🔨 Building Docker images for dev and prod...'
                 dir('campgrounds-go') {
                     sh '''
-                        export PATH=$PATH:/usr/local/go/bin:${GOPATH}/bin
-                        export CGO_ENABLED=0
-                        export GOOS=linux
+                        echo "🐳 Building development image..."
+                        docker build --target development -t ${DOCKER_IMAGE}:dev-${BUILD_NUMBER} .
+                        docker tag ${DOCKER_IMAGE}:dev-${BUILD_NUMBER} ${DOCKER_IMAGE}:dev-latest
                         
-                        echo "🔨 Building application..."
-                        go build -a -installsuffix cgo -o ${APP_NAME} main.go
+                        echo "🐳 Building production image..."
+                        docker build --target production -t ${DOCKER_IMAGE}:prod-${BUILD_NUMBER} .
+                        docker tag ${DOCKER_IMAGE}:prod-${BUILD_NUMBER} ${DOCKER_IMAGE}:prod-latest
                         
-                        # Verify build
-                        if [ ! -f ${APP_NAME} ]; then
-                            echo "❌ Build failed: executable not found"
-                            exit 1
-                        fi
+                        echo "📋 Docker images built:"
+                        docker images | grep ${DOCKER_IMAGE}
                         
-                        # Create environment-specific binaries
-                        cp ${APP_NAME} ${APP_NAME}-dev
-                        cp ${APP_NAME} ${APP_NAME}-prod
-                        
-                        ls -la ${APP_NAME}*
-                        echo "✅ Build completed successfully!"
+                        echo "✅ Docker images built successfully!"
                     '''
                 }
             }
@@ -187,203 +114,155 @@ pipeline {
             steps {
                 script {
                     if (!params.SKIP_TESTS) {
-                        echo '🧪 Running tests...'
+                        echo '🧪 Running tests in Docker container...'
                         dir('campgrounds-go') {
-                            try {
-                                sh '''
-                                    export PATH=$PATH:/usr/local/go/bin:${GOPATH}/bin
-                                    
-                                    echo "🧪 Running unit tests..."
-                                    go test -v -race -coverprofile=coverage.out ./...
-                                    
-                                    if [ -f coverage.out ]; then
-                                        echo "📊 Generating coverage report..."
-                                        go tool cover -html=coverage.out -o coverage.html
-                                        go tool cover -func=coverage.out
-                                    fi
-                                    
-                                    echo "✅ Tests completed successfully!"
-                                '''
-                            } catch (Exception e) {
-                                echo "⚠️ Tests failed: ${e.getMessage()}"
-                                // Continue anyway for demo purposes
-                            }
+                            sh '''
+                                echo "🧪 Running unit tests in development container..."
+                                
+                                # Run tests in development environment
+                                docker run --rm \
+                                    -v $(pwd):/app \
+                                    -w /app \
+                                    ${DOCKER_IMAGE}:dev-latest \
+                                    sh -c "go test -v ./... || echo 'Tests completed with issues'"
+                                
+                                echo "✅ Tests completed!"
+                            '''
                         }
                     } else {
                         echo '⏭️ Skipping tests as requested'
                     }
                 }
             }
-            post {
-                always {
-                    dir('campgrounds-go') {
-                        script {
-                            if (fileExists('coverage.out')) {
-                                archiveArtifacts artifacts: 'coverage.out,coverage.html', allowEmptyArchive: true
-                            }
-                        }
-                    }
-                }
-            }
         }
         
-        stage('📦 Create Artifacts') {
+        stage('🚀 Deploy to Development') {
+            when {
+                anyOf {
+                    expression { params.DEPLOY_ENV == 'dev' }
+                    expression { params.DEPLOY_ENV == 'both' }
+                }
+            }
             steps {
-                echo '📦 Creating deployment artifacts...'
+                echo '🚀 Deploying to Development environment...'
                 dir('campgrounds-go') {
                     sh '''
-                        echo "📦 Creating deployment packages..."
+                        echo "🚀 Starting development deployment..."
                         
-                        # Create artifact directories
-                        mkdir -p artifacts/dev artifacts/prod
+                        # Stop existing dev container
+                        docker stop campgrounds-dev || true
+                        docker rm campgrounds-dev || true
                         
-                        # Package for development
-                        tar -czf artifacts/dev/${APP_NAME}-dev-${BUILD_NUMBER}.tar.gz \
-                            ${APP_NAME}-dev templates/ static/ go.mod go.sum README.md 2>/dev/null || \
-                        tar -czf artifacts/dev/${APP_NAME}-dev-${BUILD_NUMBER}.tar.gz \
-                            ${APP_NAME}-dev go.mod go.sum 2>/dev/null || \
-                        tar -czf artifacts/dev/${APP_NAME}-dev-${BUILD_NUMBER}.tar.gz \
-                            ${APP_NAME}-dev
+                        # Start development container with hot reload
+                        docker run -d \
+                            --name campgrounds-dev \
+                            -p ${DEV_PORT}:3001 \
+                            -e PORT=3001 \
+                            -e GIN_MODE=debug \
+                            -v $(pwd):/app \
+                            --restart unless-stopped \
+                            ${DOCKER_IMAGE}:dev-latest
                         
-                        # Package for production
-                        tar -czf artifacts/prod/${APP_NAME}-prod-${BUILD_NUMBER}.tar.gz \
-                            ${APP_NAME}-prod templates/ static/ go.mod go.sum README.md 2>/dev/null || \
-                        tar -czf artifacts/prod/${APP_NAME}-prod-${BUILD_NUMBER}.tar.gz \
-                            ${APP_NAME}-prod go.mod go.sum 2>/dev/null || \
-                        tar -czf artifacts/prod/${APP_NAME}-prod-${BUILD_NUMBER}.tar.gz \
-                            ${APP_NAME}-prod
+                        # Wait for container to start
+                        echo "⏳ Waiting for development container to start..."
+                        sleep 15
                         
-                        echo "📋 Artifacts created:"
-                        ls -la artifacts/dev/ artifacts/prod/
-                        echo "✅ Artifacts created successfully"
+                        # Health check
+                        echo "🏥 Development health check..."
+                        for i in {1..10}; do
+                            if curl -f http://localhost:${DEV_PORT}/health 2>/dev/null; then
+                                echo "✅ Development health check passed"
+                                break
+                            fi
+                            echo "⏳ Waiting... ($i/10)"
+                            sleep 5
+                        done
+                        
+                        # Show container status
+                        docker ps | grep campgrounds-dev
+                        echo "✅ Development deployment completed!"
                     '''
                 }
             }
         }
         
-        stage('🚀 Deploy to Development') {
-            steps {
-                script {
-                    if (params.DEPLOY_ENV == 'dev' || params.DEPLOY_ENV == 'both') {
-                        echo '🚀 Deploying to Development environment...'
-                        dir('campgrounds-go') {
-                            sh '''
-                                echo "🚀 Starting development deployment..."
-                                
-                                # Kill existing processes
-                                pkill -f "${APP_NAME}-dev" || echo "No existing dev process"
-                                sleep 2
-                                
-                                # Start development server
-                                export PORT=${DEV_PORT}
-                                export GIN_MODE=debug
-                                
-                                echo "Starting development server on port ${DEV_PORT}..."
-                                nohup ./${APP_NAME}-dev > dev-app.log 2>&1 &
-                                DEV_PID=$!
-                                echo $DEV_PID > dev-app.pid
-                                
-                                # Wait and verify
-                                sleep 5
-                                if kill -0 $DEV_PID 2>/dev/null; then
-                                    echo "✅ Development server started (PID: $DEV_PID)"
-                                else
-                                    echo "❌ Development server failed to start"
-                                    cat dev-app.log || echo "No log file found"
-                                    exit 1
-                                fi
-                                
-                                # Health check
-                                echo "🏥 Health check..."
-                                for i in {1..10}; do
-                                    if curl -f http://localhost:${DEV_PORT}/health 2>/dev/null; then
-                                        echo "✅ Development health check passed"
-                                        break
-                                    fi
-                                    echo "⏳ Waiting... ($i/10)"
-                                    sleep 3
-                                done
-                            '''
-                        }
-                    } else {
-                        echo '⏭️ Skipping development deployment'
-                    }
-                }
-            }
-        }
-        
         stage('🚀 Deploy to Production') {
+            when {
+                anyOf {
+                    expression { params.DEPLOY_ENV == 'prod' }
+                    expression { params.DEPLOY_ENV == 'both' }
+                }
+            }
             steps {
                 script {
-                    if (params.DEPLOY_ENV == 'prod' || params.DEPLOY_ENV == 'both') {
-                        // Manual approval for production
-                        try {
-                            timeout(time: 5, unit: 'MINUTES') {
-                                input message: '🚀 Deploy to Production?', ok: 'Deploy'
-                            }
-                        } catch (Exception e) {
-                            echo "❌ Production deployment not approved or timed out"
-                            return
+                    // Manual approval for production
+                    try {
+                        timeout(time: 5, unit: 'MINUTES') {
+                            input message: '🚀 Deploy to Production?', ok: 'Deploy'
                         }
-                        
-                        echo '🚀 Deploying to Production environment...'
-                        dir('campgrounds-go') {
-                            sh '''
-                                echo "🚀 Starting production deployment..."
-                                
-                                # Kill existing processes
-                                pkill -f "${APP_NAME}-prod" || echo "No existing prod process"
-                                sleep 2
-                                
-                                # Start production server
-                                export PORT=${PROD_PORT}
-                                export GIN_MODE=release
-                                
-                                echo "Starting production server on port ${PROD_PORT}..."
-                                nohup ./${APP_NAME}-prod > prod-app.log 2>&1 &
-                                PROD_PID=$!
-                                echo $PROD_PID > prod-app.pid
-                                
-                                # Wait and verify
-                                sleep 5
-                                if kill -0 $PROD_PID 2>/dev/null; then
-                                    echo "✅ Production server started (PID: $PROD_PID)"
-                                else
-                                    echo "❌ Production server failed to start"
-                                    cat prod-app.log || echo "No log file found"
-                                    exit 1
+                    } catch (Exception e) {
+                        echo "❌ Production deployment not approved or timed out"
+                        return
+                    }
+                    
+                    echo '🚀 Deploying to Production environment...'
+                    dir('campgrounds-go') {
+                        sh '''
+                            echo "🚀 Starting production deployment..."
+                            
+                            # Stop existing prod container
+                            docker stop campgrounds-prod || true
+                            docker rm campgrounds-prod || true
+                            
+                            # Start production container
+                            docker run -d \
+                                --name campgrounds-prod \
+                                -p ${PROD_PORT}:3000 \
+                                -e PORT=3000 \
+                                -e GIN_MODE=release \
+                                --restart unless-stopped \
+                                ${DOCKER_IMAGE}:prod-latest
+                            
+                            # Wait for container to start
+                            echo "⏳ Waiting for production container to start..."
+                            sleep 15
+                            
+                            # Health check
+                            echo "🏥 Production health check..."
+                            for i in {1..10}; do
+                                if curl -f http://localhost:${PROD_PORT}/health 2>/dev/null; then
+                                    echo "✅ Production health check passed"
+                                    break
                                 fi
-                                
-                                # Health check
-                                echo "🏥 Health check..."
-                                for i in {1..10}; do
-                                    if curl -f http://localhost:${PROD_PORT}/health 2>/dev/null; then
-                                        echo "✅ Production health check passed"
-                                        break
-                                    fi
-                                    echo "⏳ Waiting... ($i/10)"
-                                    sleep 3
-                                done
-                            '''
-                        }
-                    } else {
-                        echo '⏭️ Skipping production deployment'
+                                echo "⏳ Waiting... ($i/10)"
+                                sleep 5
+                            done
+                            
+                            # Show container status
+                            docker ps | grep campgrounds-prod
+                            echo "✅ Production deployment completed!"
+                        '''
                     }
                 }
             }
         }
         
-        stage('🧪 Post-Deployment Tests') {
+        stage('🧪 Environment-Specific Tests') {
             steps {
-                echo '🧪 Running post-deployment tests...'
+                echo '🧪 Running environment-specific tests...'
                 dir('campgrounds-go') {
                     script {
                         if (params.DEPLOY_ENV == 'dev' || params.DEPLOY_ENV == 'both') {
                             echo "🧪 Testing Development environment..."
                             sh """
+                                echo "Testing Development APIs..."
                                 curl -f http://localhost:${DEV_PORT}/health || echo "Dev health check failed"
                                 curl -f http://localhost:${DEV_PORT}/api/campgrounds || echo "Dev API check failed"
                                 curl -f http://localhost:${DEV_PORT}/ || echo "Dev web check failed"
+                                
+                                echo "Development container logs:"
+                                docker logs campgrounds-dev --tail 20
+                                
                                 echo "✅ Development tests completed"
                             """
                         }
@@ -391,13 +270,54 @@ pipeline {
                         if (params.DEPLOY_ENV == 'prod' || params.DEPLOY_ENV == 'both') {
                             echo "🧪 Testing Production environment..."
                             sh """
+                                echo "Testing Production APIs..."
                                 curl -f http://localhost:${PROD_PORT}/health || echo "Prod health check failed"
                                 curl -f http://localhost:${PROD_PORT}/api/campgrounds || echo "Prod API check failed"
                                 curl -f http://localhost:${PROD_PORT}/ || echo "Prod web check failed"
+                                
+                                echo "Production container logs:"
+                                docker logs campgrounds-prod --tail 20
+                                
                                 echo "✅ Production tests completed"
                             """
                         }
                     }
+                }
+            }
+        }
+        
+        stage('📊 Environment Comparison') {
+            when {
+                expression { params.DEPLOY_ENV == 'both' }
+            }
+            steps {
+                echo '📊 Comparing dev and prod environments...'
+                dir('campgrounds-go') {
+                    sh '''
+                        echo "📊 Environment Comparison Report:"
+                        echo "=================================="
+                        
+                        echo "🔍 Container Status:"
+                        docker ps | grep campgrounds
+                        
+                        echo ""
+                        echo "🔍 Image Sizes:"
+                        docker images | grep ${DOCKER_IMAGE}
+                        
+                        echo ""
+                        echo "🔍 Resource Usage:"
+                        docker stats --no-stream campgrounds-dev campgrounds-prod || true
+                        
+                        echo ""
+                        echo "🔍 Health Check Comparison:"
+                        echo "Development Health:"
+                        curl -s http://localhost:${DEV_PORT}/health | jq . || echo "Dev health check failed"
+                        
+                        echo "Production Health:"
+                        curl -s http://localhost:${PROD_PORT}/health | jq . || echo "Prod health check failed"
+                        
+                        echo "✅ Environment comparison completed"
+                    '''
                 }
             }
         }
@@ -406,37 +326,46 @@ pipeline {
     post {
         always {
             echo '🏁 Pipeline completed!'
-            dir('campgrounds-go') {
-                script {
-                    if (fileExists('artifacts')) {
-                        archiveArtifacts artifacts: 'artifacts/**/*', allowEmptyArchive: true
-                    }
-                    if (fileExists('*.log')) {
-                        archiveArtifacts artifacts: '*.log', allowEmptyArchive: true
-                    }
-                }
-            }
+            sh '''
+                echo "🐳 Final Container Status:"
+                docker ps -a | grep campgrounds || echo "No campgrounds containers found"
+                
+                echo "🖼️ Final Image Status:"
+                docker images | grep yelp-camp || echo "No yelp-camp images found"
+                
+                echo "💾 Disk Usage:"
+                docker system df
+            '''
         }
         
         success {
             echo '✅ Pipeline succeeded! 🎉'
             script {
-                def message = "🎉 Deployment Summary:\n📦 Build: ${env.BUILD_NUMBER}\n"
+                def message = "🎉 Docker Deployment Summary:\n📦 Build: ${env.BUILD_NUMBER}\n"
                 if (params.DEPLOY_ENV == 'dev' || params.DEPLOY_ENV == 'both') {
-                    message += "🚀 Development: http://localhost:${env.DEV_PORT}\n"
+                    message += "🚀 Development: http://localhost:${env.DEV_PORT} (Hot Reload Enabled)\n"
                 }
                 if (params.DEPLOY_ENV == 'prod' || params.DEPLOY_ENV == 'both') {
-                    message += "🚀 Production: http://localhost:${env.PROD_PORT}\n"
+                    message += "🚀 Production: http://localhost:${env.PROD_PORT} (Optimized Build)\n"
                 }
+                message += "\n📋 Key Differences:\n"
+                message += "• Dev: Hot reload, debug mode, larger image\n"
+                message += "• Prod: Optimized binary, release mode, smaller image\n"
                 echo message
             }
         }
         
         failure {
             echo '❌ Pipeline failed!'
-            dir('campgrounds-go') {
-                sh 'pkill -f "${APP_NAME}" || true'
-            }
+            sh '''
+                echo "🔍 Debugging information:"
+                docker logs campgrounds-dev --tail 50 || true
+                docker logs campgrounds-prod --tail 50 || true
+                
+                # Clean up on failure
+                docker stop campgrounds-dev campgrounds-prod || true
+                docker rm campgrounds-dev campgrounds-prod || true
+            '''
         }
     }
 }

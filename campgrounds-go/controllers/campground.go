@@ -26,7 +26,12 @@ func (cc *CampgroundController) GetAll(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"campgrounds": campgrounds})
+	c.JSON(http.StatusOK, gin.H{
+		"message":     "Campgrounds retrieved successfully",
+		"data":        campgrounds,
+		"count":       len(campgrounds),
+		"campgrounds": campgrounds, // For backward compatibility
+	})
 }
 
 func (cc *CampgroundController) GetByID(c *gin.Context) {
@@ -48,7 +53,10 @@ func (cc *CampgroundController) GetByID(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"campground": campground})
+	c.JSON(http.StatusOK, gin.H{
+		"message":    "Campground retrieved successfully",
+		"campground": campground,
+	})
 }
 
 func (cc *CampgroundController) Create(c *gin.Context) {

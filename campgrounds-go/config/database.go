@@ -17,44 +17,41 @@ var (
 )
 
 func ConnectMongoDB() {
-	// MongoDB connection string
-	mongoURI := fmt.Sprintf("mongodb://%s:%s@%s:%s/%s?authSource=admin",
-		getEnvOrDefault("MONGO_USER", "yelpcamp_dev"),
-		getEnvOrDefault("MONGO_PASSWORD", "dev_password_123"),
-		getEnvOrDefault("MONGO_HOST", "localhost"),
-		getEnvOrDefault("MONGO_PORT", "27017"),
-		getEnvOrDefault("MONGO_DATABASE", "yelpcamp_dev"),
-	)
+	mongoHost := getEnvOrDefault("MONGO_HOST", "localhost")
+	mongoPort := getEnvOrDefault("MONGO_PORT", "27017")
+	mongoDatabase := getEnvOrDefault("MONGO_DATABASE", "yelpcamp_dev")
 
-	log.Printf("🔗 Connecting to MongoDB: %s:%s", 
-		getEnvOrDefault("MONGO_HOST", "localhost"), 
-		getEnvOrDefault("MONGO_PORT", "27017"))
+	// Simple connection string without authentication for Docker
+	connectionString := fmt.Sprintf("mongodb://%s:%s/%s", mongoHost, mongoPort, mongoDatabase)
+	
+	log.Printf("🔗 Connecting to MongoDB: %s", connectionString)
 
-	// Set client options
-	clientOptions := options.Client().ApplyURI(mongoURI)
+	clientOptions := options.Client().ApplyURI(connectionString)
 	clientOptions.SetMaxPoolSize(20)
 	clientOptions.SetMinPoolSize(5)
 	clientOptions.SetMaxConnIdleTime(30 * time.Second)
+	clientOptions.SetServerSelectionTimeout(10 * time.Second)
 
-	// Connect to MongoDB
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 
 	client, err := mongo.Connect(ctx, clientOptions)
 	if err != nil {
-		log.Fatal("Failed to connect to MongoDB:", err)
+		log.Printf("❌ MongoDB connection failed: %v", err)
+		log.Fatal("Could not connect to MongoDB")
 	}
 
 	// Test the connection
 	err = client.Ping(ctx, nil)
 	if err != nil {
-		log.Fatal("Failed to ping MongoDB:", err)
+		log.Printf("❌ MongoDB ping failed: %v", err)
+		log.Fatal("Could not ping MongoDB")
 	}
 
 	MongoClient = client
-	DB = client.Database(getEnvOrDefault("MONGO_DATABASE", "yelpcamp_dev"))
+	DB = client.Database(mongoDatabase)
 	
-	log.Println("✅ MongoDB connected successfully")
+	log.Printf("✅ MongoDB connected successfully to database: %s", mongoDatabase)
 }
 
 func GetDB() *mongo.Database {

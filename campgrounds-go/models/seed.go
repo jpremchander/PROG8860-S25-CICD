@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 	"yelpcamp-go/config"
 )
 
@@ -22,13 +21,13 @@ func SeedData() {
 	}
 	
 	if count > 0 {
-		log.Println("Sample data already exists, skipping seed")
+		log.Printf("Sample data already exists (%d campgrounds), skipping seed", count)
 		return
 	}
 	
 	log.Println("🌱 Seeding sample data...")
 	
-	// Create sample users
+	// Create sample users with proper password hashing
 	users := []User{
 		{
 			Username: "igoswamik",
@@ -68,7 +67,7 @@ func SeedData() {
 		return
 	}
 	
-	// Create sample campgrounds
+	// Create sample campgrounds with realistic data
 	campgrounds := []Campground{
 		{
 			Title:       "Redwood, Flats",
@@ -114,7 +113,7 @@ func SeedData() {
 		},
 		{
 			Title:       "Mountain View Retreat",
-			Description: "Experience breathtaking mountain views and pristine wilderness at this secluded campground. Perfect for hiking enthusiasts and nature photographers.",
+			Description: "Experience breathtaking mountain views and pristine wilderness at this secluded campground. Perfect for hiking enthusiasts and nature photographers. Features include fire pits, picnic tables, and access to hiking trails.",
 			Location:    "Aspen, Colorado",
 			Price:       35.00,
 			AuthorID:    userIDs[3], // alice
@@ -128,7 +127,7 @@ func SeedData() {
 		},
 		{
 			Title:       "Lakeside Paradise",
-			Description: "Wake up to stunning lake views and enjoy swimming, fishing, and kayaking. This family-friendly campground offers clean restrooms and showers.",
+			Description: "Wake up to stunning lake views and enjoy swimming, fishing, and kayaking. This family-friendly campground offers clean restrooms, showers, and a camp store. Perfect for a relaxing weekend getaway.",
 			Location:    "Lake Tahoe, Nevada",
 			Price:       28.00,
 			AuthorID:    userIDs[0], // igoswamik
@@ -140,13 +139,55 @@ func SeedData() {
 				},
 			},
 		},
+		{
+			Title:       "Desert Oasis",
+			Description: "Discover the beauty of the desert landscape under star-filled skies. This unique campground offers a peaceful escape with stunning sunsets and sunrise views. Ideal for stargazing and desert photography.",
+			Location:    "Sedona, Arizona",
+			Price:       25.50,
+			AuthorID:    userIDs[1], // hannah
+			Images: []Image{
+				{
+					URL:      "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop",
+					Filename: "desert-oasis-1.jpg",
+					Key:      "yelpcamp/desert-oasis-1",
+				},
+			},
+		},
+		{
+			Title:       "Forest Haven",
+			Description: "Immerse yourself in old-growth forest with towering trees and peaceful hiking trails. This campground offers a true back-to-nature experience with minimal amenities for the adventurous camper.",
+			Location:    "Olympic National Park, Washington",
+			Price:       20.00,
+			AuthorID:    userIDs[2], // bob
+			Images: []Image{
+				{
+					URL:      "https://images.unsplash.com/photo-1571863533956-01c88e79957e?w=800&h=600&fit=crop",
+					Filename: "forest-haven-1.jpg",
+					Key:      "yelpcamp/forest-haven-1",
+				},
+			},
+		},
+		{
+			Title:       "Coastal Bluffs",
+			Description: "Camp on dramatic coastal bluffs with panoramic ocean views. Listen to the waves crash below while enjoying spectacular sunsets. Features include wind-resistant fire pits and ocean access trails.",
+			Location:    "Big Sur, California",
+			Price:       42.00,
+			AuthorID:    userIDs[3], // alice
+			Images: []Image{
+				{
+					URL:      "https://images.unsplash.com/photo-1571863533956-01c88e79957e?w=800&h=600&fit=crop",
+					Filename: "coastal-bluffs-1.jpg",
+					Key:      "yelpcamp/coastal-bluffs-1",
+				},
+			},
+		},
 	}
 	
-	// Insert campgrounds
+	// Insert campgrounds with different creation dates
 	var campgroundIDs []primitive.ObjectID
 	for i := range campgrounds {
 		// Set creation time to simulate different dates
-		campgrounds[i].CreatedAt = time.Now().AddDate(0, 0, -(i+1)*2) // 2, 4, 6, 8, 10 days ago
+		campgrounds[i].CreatedAt = time.Now().AddDate(0, 0, -(i+1)*2) // 2, 4, 6, 8, 10, 12, 14, 16 days ago
 		campgrounds[i].UpdatedAt = campgrounds[i].CreatedAt
 		
 		if err := campgrounds[i].Create(db); err != nil {
@@ -158,7 +199,7 @@ func SeedData() {
 	}
 	
 	// Create sample reviews
-	if len(campgroundIDs) > 0 {
+	if len(campgroundIDs) > 0 && len(userIDs) > 0 {
 		reviews := []Review{
 			{
 				Rating:       5,
@@ -190,18 +231,30 @@ func SeedData() {
 				AuthorID:     userIDs[0], // igoswamik
 				CampgroundID: campgroundIDs[2], // Petrified, Creekside
 			},
+			{
+				Rating:       5,
+				Body:         "Absolutely stunning mountain views! Worth every penny.",
+				AuthorID:     userIDs[1], // hannah
+				CampgroundID: campgroundIDs[3], // Mountain View Retreat
+			},
+			{
+				Rating:       4,
+				Body:         "Great for families! Kids loved swimming in the lake.",
+				AuthorID:     userIDs[2], // bob
+				CampgroundID: campgroundIDs[4], // Lakeside Paradise
+			},
 		}
 		
 		for i := range reviews {
-			reviews[i].CreatedAt = time.Now().AddDate(0, 0, -(i+1)) // 1, 2, 3, 4, 5 days ago
+			reviews[i].CreatedAt = time.Now().AddDate(0, 0, -(i+1)) // 1, 2, 3, 4, 5, 6, 7 days ago
 			reviews[i].UpdatedAt = reviews[i].CreatedAt
 			
 			if err := reviews[i].Create(db); err != nil {
 				log.Printf("Error creating review: %v", err)
 				continue
 			}
-			log.Printf("✅ Created review for campground")
 		}
+		log.Printf("✅ Created %d reviews", len(reviews))
 	}
 	
 	log.Println("🎉 Sample data seeding completed!")
@@ -212,4 +265,21 @@ func SeedData() {
 	log.Println("")
 	log.Println("🔐 All sample users have password: password123")
 	log.Println("🌐 Visit /campgrounds to see the sample data!")
+}
+
+// ForceSeedData clears existing data and creates fresh sample data
+func ForceSeedData() {
+	db := config.GetDB()
+	
+	log.Println("🧹 Clearing existing data...")
+	
+	// Clear existing data
+	db.Collection("reviews").DeleteMany(context.Background(), map[string]interface{}{})
+	db.Collection("campgrounds").DeleteMany(context.Background(), map[string]interface{}{})
+	db.Collection("users").DeleteMany(context.Background(), map[string]interface{}{})
+	
+	log.Println("✅ Cleared existing data")
+	
+	// Seed fresh data
+	SeedData()
 }

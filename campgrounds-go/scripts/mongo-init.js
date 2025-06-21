@@ -1,6 +1,8 @@
 // MongoDB initialization script for development
-const db = db.getSiblingDB("yelpcamp_dev")
+print("🌱 Initializing YelpCamp MongoDB...")
+
 const { ObjectId } = require("mongodb")
+const db = db.getSiblingDB("yelpcamp_dev")
 
 // Create collections
 db.createCollection("users")
@@ -15,13 +17,15 @@ db.campgrounds.createIndex({ location: "text", title: "text", description: "text
 db.reviews.createIndex({ campground_id: 1 })
 db.reviews.createIndex({ author_id: 1 })
 
-// Insert sample users
+print("✅ Created collections and indexes")
+
+// Insert sample users with hashed passwords (password123)
 const users = [
   {
     _id: ObjectId(),
     username: "igoswamik",
     email: "igor@yelpcamp.com",
-    password: "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi", // password123
+    password: "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi",
     created_at: new Date(),
     updated_at: new Date(),
   },
@@ -29,7 +33,7 @@ const users = [
     _id: ObjectId(),
     username: "hannah",
     email: "hannah@yelpcamp.com",
-    password: "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi", // password123
+    password: "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi",
     created_at: new Date(),
     updated_at: new Date(),
   },
@@ -37,7 +41,7 @@ const users = [
     _id: ObjectId(),
     username: "bob",
     email: "bob@yelpcamp.com",
-    password: "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi", // password123
+    password: "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi",
     created_at: new Date(),
     updated_at: new Date(),
   },
@@ -45,13 +49,14 @@ const users = [
     _id: ObjectId(),
     username: "alice",
     email: "alice@yelpcamp.com",
-    password: "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi", // password123
+    password: "$2a$10$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi",
     created_at: new Date(),
     updated_at: new Date(),
   },
 ]
 
 db.users.insertMany(users)
+print("✅ Created " + users.length + " sample users")
 
 // Get user IDs for campground authors
 const igoswamik = db.users.findOne({ username: "igoswamik" })._id
@@ -208,6 +213,7 @@ const campgrounds = [
 ]
 
 db.campgrounds.insertMany(campgrounds)
+print("✅ Created " + campgrounds.length + " sample campgrounds")
 
 // Get campground IDs for reviews
 const redwoodFlats = db.campgrounds.findOne({ title: "Redwood, Flats" })._id
@@ -284,12 +290,13 @@ const reviews = [
 ]
 
 db.reviews.insertMany(reviews)
+print("✅ Created " + reviews.length + " sample reviews")
 
-print("✅ Development database initialized with sample campgrounds and reviews")
+print("🎉 YelpCamp MongoDB initialization completed!")
 print("📊 Sample data created:")
-print(`   - ${users.length} users (igoswamik, hannah, bob, alice)`)
-print(`   - ${campgrounds.length} campgrounds`)
-print(`   - ${reviews.length} reviews`)
+print("   - " + users.length + " users (igoswamik, hannah, bob, alice)")
+print("   - " + campgrounds.length + " campgrounds")
+print("   - " + reviews.length + " reviews")
 print("")
 print("🔐 All users have password: password123")
 print("🌐 You can now visit /campgrounds to see the sample data!")

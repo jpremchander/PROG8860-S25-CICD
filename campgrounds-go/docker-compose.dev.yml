@@ -8,12 +8,17 @@ services:
     ports:
       - "3000:3000"
     environment:
+      - MONGO_HOST=mongo
+      - MONGO_PORT=27017
+      - MONGO_DATABASE=yelpcamp_dev
       - GIN_MODE=debug
       - PORT=3000
-      - JWT_SECRET=dev_jwt_secret_key_2024
+    depends_on:
+      - mongo
+    volumes:
+      - ./templates:/app/templates
+      - ./static:/app/static
     restart: unless-stopped
-    networks:
-      - yelpcamp-network
     healthcheck:
       test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
       interval: 30s
@@ -21,49 +26,27 @@ services:
       retries: 3
       start_period: 40s
 
-  # Optional: Keep MongoDB for future use
   mongo:
     image: mongo:7.0
-    environment:
-      - MONGO_INITDB_ROOT_USERNAME=yelpcamp_dev
-      - MONGO_INITDB_ROOT_PASSWORD=dev_password_123
-      - MONGO_INITDB_DATABASE=yelpcamp_dev
+    container_name: yelpcamp-mongo
     ports:
       - "27017:27017"
+    environment:
+      - MONGO_INITDB_DATABASE=yelpcamp_dev
     volumes:
-      - mongo_dev_data:/data/db
+      - mongo_data:/data/db
+      - ./scripts/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-      start_period: 30s
-    restart: unless-stopped
-    networks:
-      - yelpcamp-network
-
-  # Optional: MongoDB Admin UI
-  mongo-express:
-    image: mongo-express:latest
-    environment:
-      - ME_CONFIG_MONGODB_ADMINUSERNAME=yelpcamp_dev
-      - ME_CONFIG_MONGODB_ADMINPASSWORD=dev_password_123
-      - ME_CONFIG_MONGODB_SERVER=mongo
-      - ME_CONFIG_MONGODB_PORT=27017
-      - ME_CONFIG_BASICAUTH_USERNAME=admin
-      - ME_CONFIG_BASICAUTH_PASSWORD=admin123
-    ports:
-      - "8081:8081"
-    depends_on:
-      mongo:
-        condition: service_healthy
-    restart: unless-stopped
-    networks:
-      - yelpcamp-network
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
 volumes:
-  mongo_dev_data:
+  mongo_data:
 
 networks:
-  yelpcamp-network:
-    driver: bridge
+  default:
+    name: yelpcamp-network

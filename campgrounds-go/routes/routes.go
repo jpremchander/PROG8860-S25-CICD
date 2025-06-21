@@ -17,6 +17,16 @@ func SetupRoutes(r *gin.Engine) {
 	campgroundController := controllers.NewCampgroundController()
 	reviewController := controllers.NewReviewController()
 
+	// Add health check at root level for convenience
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{
+			"status":    "ok",
+			"message":   "YelpCamp Go API is running",
+			"timestamp": "2024-06-19",
+			"version":   "1.0.0",
+		})
+	})
+
 	// Web Routes (HTML pages)
 	setupWebRoutes(r, authController, campgroundController, reviewController)
 	
@@ -205,6 +215,23 @@ func setupAPIRoutes(r *gin.Engine, authController *controllers.AuthController, c
 				"message":   "YelpCamp Go API is running",
 				"timestamp": "2024-06-19",
 				"version":   "1.0.0",
+			})
+		})
+
+		// Test endpoint
+		api.GET("/test", func(c *gin.Context) {
+			c.JSON(200, gin.H{
+				"message": "Test endpoint working",
+				"data": gin.H{
+					"server_time": "2024-06-19T10:00:00Z",
+					"endpoints": []string{
+						"/api/health",
+						"/api/campgrounds",
+						"/api/campgrounds/:id",
+						"/api/auth/register",
+						"/api/auth/login",
+					},
+				},
 			})
 		})
 

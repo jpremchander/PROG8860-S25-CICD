@@ -7,10 +7,6 @@ pipeline {
         GOPATH = "${WORKSPACE}/go"
         GOPROXY = 'https://proxy.golang.org,direct'
         GOSUMDB = 'sum.golang.org'
-        GOPRIVATE = ''
-        GONOPROXY = ''
-        GONOSUMDB = ''
-        GOINSECURE = ''
         CGO_ENABLED = '0'
         GOOS = 'linux'
         
@@ -21,10 +17,6 @@ pipeline {
         // Environment Ports
         DEV_PORT = '3001'
         PROD_PORT = '3000'
-        
-        // AWS Configuration (if using S3 for artifacts)
-        AWS_DEFAULT_REGION = 'ca-central-1'
-        AWS_S3_BUCKET = 'yelp-camp-project'
         
         // Build Artifacts
         ARTIFACT_NAME = "${APP_NAME}-${BUILD_NUMBER}"
@@ -58,7 +50,6 @@ pipeline {
         buildDiscarder(logRotator(numToKeepStr: '10'))
         timeout(time: 30, unit: 'MINUTES')
         timestamps()
-        ansiColor('xterm')
     }
     
     stages {
@@ -198,8 +189,10 @@ pipeline {
         }
         
         stage('🔍 Code Quality & Linting') {
-            when {
-                not { params.SKIP_LINT }
+            when { 
+                not { 
+                    params.SKIP_LINT 
+                } 
             }
             steps {
                 echo '🔍 Running code quality checks...'
@@ -225,14 +218,6 @@ pipeline {
                                 # Check for TODO/FIXME comments
                                 if grep -r "TODO\\|FIXME" --include="*.go" .; then
                                     echo "⚠️ Found TODO/FIXME comments in code"
-                                fi
-                                
-                                # Install and run golangci-lint if available
-                                if command -v golangci-lint &> /dev/null; then
-                                    echo "🔍 Running golangci-lint..."
-                                    golangci-lint run
-                                else
-                                    echo "⚠️ golangci-lint not available, skipping advanced linting"
                                 fi
                                 
                                 echo "✅ Code quality checks passed"
@@ -284,8 +269,10 @@ pipeline {
         }
         
         stage('🧪 Run Tests') {
-            when {
-                not { params.SKIP_TESTS }
+            when { 
+                not { 
+                    params.SKIP_TESTS 
+                } 
             }
             steps {
                 echo '🧪 Running tests...'
@@ -306,11 +293,12 @@ pipeline {
                                     echo "📈 Coverage summary:"
                                     go tool cover -func=coverage.out
                                     
-                                    # Check coverage threshold
+                                    # Check coverage threshold (basic check without bc)
                                     COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
                                     echo "📊 Total coverage: ${COVERAGE}%"
                                     
-                                    if [ $(echo "${COVERAGE} < ${COVERAGE_THRESHOLD}" | bc -l) -eq 1 ]; then
+                                    # Simple coverage check
+                                    if [ "${COVERAGE%.*}" -lt "${COVERAGE_THRESHOLD}" ]; then
                                         echo "⚠️ Coverage ${COVERAGE}% is below threshold ${COVERAGE_THRESHOLD}%"
                                         if [ "${FORCE_DEPLOY}" != "true" ]; then
                                             echo "❌ Coverage threshold not met"
@@ -338,14 +326,6 @@ pipeline {
                             // Archive test results and coverage
                             if (fileExists('coverage.out')) {
                                 archiveArtifacts artifacts: 'coverage.out,coverage.html', allowEmptyArchive: true
-                                publishHTML([
-                                    allowMissing: false,
-                                    alwaysLinkToLastBuild: true,
-                                    keepAll: true,
-                                    reportDir: '.',
-                                    reportFiles: 'coverage.html',
-                                    reportName: 'Coverage Report'
-                                ])
                             }
                         }
                     }
@@ -562,13 +542,6 @@ pipeline {
                     if (fileExists('*.log')) {
                         archiveArtifacts artifacts: '*.log', allowEmptyArchive: true
                     }
-                }
-            }
-            
-            // Clean up workspace if needed
-            script {
-                if (env.CLEAN_WORKSPACE == 'true') {
-                    cleanWs()
                 }
             }
         }

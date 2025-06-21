@@ -31,7 +31,7 @@ func SetupRoutes(r *gin.Engine) {
 	setupWebRoutes(r, authController, campgroundController, reviewController)
 	
 	// API Routes (JSON responses)
-	setupAPIRoutes(r, authController, campgroundController, reviewController)
+	setupAPIRoutes(r)
 }
 
 func setupWebRoutes(r *gin.Engine, authController *controllers.AuthController, campgroundController *controllers.CampgroundController, reviewController *controllers.ReviewController) {
@@ -204,7 +204,7 @@ func setupWebRoutes(r *gin.Engine, authController *controllers.AuthController, c
 	r.DELETE("/campgrounds/:id/reviews/:reviewId", middleware.WebAuthRequired(), reviewController.DeleteWeb)
 }
 
-func setupAPIRoutes(r *gin.Engine, authController *controllers.AuthController, campgroundController *controllers.CampgroundController, reviewController *controllers.ReviewController) {
+func setupAPIRoutes(r *gin.Engine) {
 	// API routes
 	api := r.Group("/api")
 	{
@@ -235,55 +235,50 @@ func setupAPIRoutes(r *gin.Engine, authController *controllers.AuthController, c
 			})
 		})
 
-		// Auth routes
-		auth := api.Group("/auth")
-		{
-			auth.POST("/register", authController.Register)
-			auth.POST("/login", authController.Login)
-		}
-
 		// Campground routes
 		campgrounds := api.Group("/campgrounds")
 		{
-			campgrounds.GET("", campgroundController.GetAll)
-			campgrounds.GET("/:id", campgroundController.GetByID)
-			
-			// Protected routes
-			campgrounds.POST("", middleware.AuthRequired(), campgroundController.Create)
-			campgrounds.PUT("/:id", middleware.AuthRequired(), campgroundController.Update)
-			campgrounds.DELETE("/:id", middleware.AuthRequired(), campgroundController.Delete)
-			campgrounds.POST("/:id/images", middleware.AuthRequired(), campgroundController.UploadImages)
-			
-			// Review routes
-			campgrounds.POST("/:id/reviews", middleware.AuthRequired(), reviewController.Create)
-			campgrounds.DELETE("/:id/reviews/:reviewId", middleware.AuthRequired(), reviewController.Delete)
-		}
+			campgrounds.GET("", func(c *gin.Context) {
+				db := config.GetDB()
+				campgroundsList, err := models.FindAllCampgrounds(db)
+				if err != nil {
+					c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not fetch campgrounds"})
+					return
+				}
 
-		// User routes
-		users := api.Group("/users")
-		{
-			users.GET("/:id", func(c *gin.Context) {
+				c.JSON(http.StatusOK, gin.H{
+					"campgrounds": campgroundsList,
+					"count":       len(campgroundsList),
+				})
+			})
+
+			campgrounds.GET("/:id", func(c *gin.Context) {
 				idParam := c.Param("id")
 				id, err := primitive.ObjectIDFromHex(idParam)
 				if err != nil {
-					c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
+					c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid campground ID"})
 					return
 				}
 
 				db := config.GetDB()
-				user, err := models.FindUserByID(db, id)
+				campground, err := models.FindCampgroundByID(db, id)
 				if err != nil {
-					c.JSON(http.StatusNotFound, gin.H{"error": "User not found"})
+					c.JSON(http.StatusNotFound, gin.H{"error": "Campground not found"})
 					return
 				}
 
-				campgrounds, _ := models.FindCampgroundsByAuthor(db, id)
-
-				c.JSON(http.StatusOK, gin.H{
-					"user":        user,
-					"campgrounds": campgrounds,
-				})
+				c.JSON(http.StatusOK, campground)
 			})
 		}
 	}
+}
+
+// SetupWebRoutes sets up web routes
+func SetupWebRoutes(r *gin.Engine, authController *controllers.AuthController, campgroundController *controllers.CampgroundController, reviewController *controllers.ReviewController) {
+	setupWebRoutes(r, authController, campgroundController, reviewController)
+}
+
+// SetupAPIRoutes sets up API routes
+func SetupAPIRoutes(r *gin.Engine) {
+	setupAPIRoutes(r)
 }

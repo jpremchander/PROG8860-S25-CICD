@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"html/template"
 	"log"
 	"net/http"
 	"os"
@@ -59,7 +58,7 @@ func main() {
 	router.Use(gin.Recovery())
 
 	// Add CORS middleware
-	router.Use(middleware.CORSMiddleware())
+	router.Use(middleware.CORS())
 
 	// Serve static files
 	router.Static("/static", "./static")
@@ -75,7 +74,7 @@ func main() {
 
 	// Setup routes
 	routes.SetupWebRoutes(router, authController, campgroundController, reviewController)
-	routes.SetupAPIRoutes(router, authController, campgroundController, reviewController)
+	routes.SetupAPIRoutes(router)
 
 	// Root route - redirect to campgrounds
 	router.GET("/", func(c *gin.Context) {

@@ -3,12 +3,8 @@ package controllers
 import (
 	"log"
 	"net/http"
-	"os"
-	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v4"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 	"yelpcamp-go/config"
 	"yelpcamp-go/models"
 	"yelpcamp-go/utils"
@@ -66,7 +62,7 @@ func (ac *AuthController) Register(c *gin.Context) {
 	})
 }
 
-// Web Registration - Integrated with auto JWT
+// Web Registration - Fixed with better error handling
 func (ac *AuthController) RegisterWeb(c *gin.Context) {
 	username := c.PostForm("username")
 	email := c.PostForm("email")
@@ -108,7 +104,6 @@ func (ac *AuthController) RegisterWeb(c *gin.Context) {
 		return
 	}
 
-	// Use the integrated JWT generation
 	token, err := utils.GenerateJWTToken(user.ID)
 	if err != nil {
 		log.Printf("❌ Error generating token: %v", err)
@@ -164,7 +159,7 @@ func (ac *AuthController) Login(c *gin.Context) {
 	})
 }
 
-// Web Login - Integrated with auto JWT
+// Web Login - Fixed with comprehensive logging
 func (ac *AuthController) LoginWeb(c *gin.Context) {
 	username := c.PostForm("username")
 	password := c.PostForm("password")

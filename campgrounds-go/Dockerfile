@@ -35,6 +35,7 @@ RUN addgroup -g 1001 -S devgroup && \
 
 # Change ownership
 RUN chown -R devuser:devgroup /app
+RUN mkdir -p /app/tmp && chown -R devuser:devgroup /app/tmp
 
 USER devuser
 

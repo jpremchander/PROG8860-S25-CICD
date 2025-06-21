@@ -39,8 +39,9 @@ func main() {
 	// Initialize Gin router
 	router := gin.Default()
 
-	// Add CORS middleware
-	router.Use(middleware.CORSMiddleware())
+	// Add CORS middleware (using the correct function name)
+	router.Use(middleware.CORS())
+	router.Use(middleware.Logger())
 
 	// Serve static files
 	router.Static("/static", "./static")
@@ -52,6 +53,7 @@ func main() {
 	// Initialize controllers
 	authController := controllers.NewAuthController()
 	campgroundController := controllers.NewCampgroundController()
+	reviewController := controllers.NewReviewController()
 
 	// Basic routes
 	router.GET("/", func(c *gin.Context) {
@@ -63,17 +65,17 @@ func main() {
 	// Health check endpoints
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"status":    "healthy",
-			"timestamp": "2025-06-21T13:25:00Z",
-			"version":   "1.0.0",
+			"status":         "healthy",
+			"timestamp":      "2025-06-21T13:30:00Z",
+			"version":        "1.0.0",
 			"jwt_configured": os.Getenv("JWT_SECRET") != "",
 		})
 	})
 
 	router.GET("/api/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
-			"status": "API is running",
-			"database": "connected",
+			"status":         "API is running",
+			"database":       "connected",
 			"jwt_configured": os.Getenv("JWT_SECRET") != "",
 		})
 	})
@@ -81,17 +83,17 @@ func main() {
 	// API routes
 	api := router.Group("/api")
 	{
-		// Campgrounds API
-		api.GET("/campgrounds", campgroundController.GetAllCampgrounds)
-		api.GET("/campgrounds/:id", campgroundController.GetCampgroundByID)
-		
+		// Campgrounds API (using correct method names)
+		api.GET("/campgrounds", campgroundController.GetAll)
+		api.GET("/campgrounds/:id", campgroundController.GetByID)
+
 		// Protected routes
 		protected := api.Group("/")
 		protected.Use(middleware.AuthRequired())
 		{
-			protected.POST("/campgrounds", campgroundController.CreateCampground)
-			protected.PUT("/campgrounds/:id", campgroundController.UpdateCampground)
-			protected.DELETE("/campgrounds/:id", campgroundController.DeleteCampground)
+			protected.POST("/campgrounds", campgroundController.Create)
+			protected.PUT("/campgrounds/:id", campgroundController.Update)
+			protected.DELETE("/campgrounds/:id", campgroundController.Delete)
 		}
 
 		// Auth API routes
@@ -102,8 +104,8 @@ func main() {
 		}
 	}
 
-	// Web routes
-	routes.SetupWebRoutes(router, authController, campgroundController)
+	// Web routes (with all required parameters)
+	routes.SetupWebRoutes(router, authController, campgroundController, reviewController)
 
 	// Get port from environment or default to 3000
 	port := os.Getenv("PORT")

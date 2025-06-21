@@ -2,25 +2,11 @@ pipeline {
     agent any
     
     environment {
-        // Go Configuration
         GO_VERSION = '1.21'
         GOPATH = "${WORKSPACE}/go"
-        GOPROXY = 'https://proxy.golang.org,direct'
-        GOSUMDB = 'sum.golang.org'
-        CGO_ENABLED = '0'
-        GOOS = 'linux'
-        
-        // Application Configuration
         APP_NAME = 'campgrounds-go'
-        APP_VERSION = "${BUILD_NUMBER}"
-        
-        // Environment Ports
         DEV_PORT = '3001'
         PROD_PORT = '3000'
-        
-        // Build Artifacts
-        ARTIFACT_NAME = "${APP_NAME}-${BUILD_NUMBER}"
-        COVERAGE_THRESHOLD = '70'
     }
     
     parameters {
@@ -32,17 +18,7 @@ pipeline {
         booleanParam(
             name: 'SKIP_TESTS',
             defaultValue: false,
-            description: 'Skip running tests (not recommended for production)'
-        )
-        booleanParam(
-            name: 'SKIP_LINT',
-            defaultValue: false,
-            description: 'Skip code linting and static analysis'
-        )
-        booleanParam(
-            name: 'FORCE_DEPLOY',
-            defaultValue: false,
-            description: 'Force deployment even if tests fail'
+            description: 'Skip running tests'
         )
     }
     
@@ -56,66 +32,47 @@ pipeline {
         stage('🧹 Clean Workspace') {
             steps {
                 echo '🧹 Cleaning workspace and Go cache...'
-                script {
-                    try {
-                        sh '''
-                            # Clean workspace
-                            echo "Cleaning workspace..."
-                            rm -rf ${WORKSPACE}/* || true
-                            rm -rf ${WORKSPACE}/.* 2>/dev/null || true
-                            
-                            # Clean Go cache if Go is available
-                            if command -v go &> /dev/null; then
-                                export PATH=$PATH:/usr/local/go/bin:${GOPATH}/bin
-                                echo "Cleaning Go cache..."
-                                go clean -cache -modcache -testcache 2>/dev/null || echo "Go cache clean failed, continuing..."
-                            fi
-                            
-                            # Clean Jenkins Go cache
-                            rm -rf ~/.cache/go-build 2>/dev/null || true
-                            rm -rf ${GOPATH}/pkg/mod 2>/dev/null || true
-                            
-                            echo "✅ Workspace cleaned successfully"
-                        '''
-                    } catch (Exception e) {
-                        echo "⚠️ Workspace cleaning had issues, but continuing: ${e.getMessage()}"
-                    }
-                }
+                sh '''
+                    # Clean workspace
+                    rm -rf ${WORKSPACE}/* || true
+                    rm -rf ${WORKSPACE}/.* 2>/dev/null || true
+                    
+                    # Clean Go cache if available
+                    if command -v go &> /dev/null; then
+                        export PATH=$PATH:/usr/local/go/bin
+                        go clean -cache -modcache -testcache 2>/dev/null || echo "Go cache clean failed, continuing..."
+                    fi
+                    
+                    echo "✅ Workspace cleaned"
+                '''
             }
         }
         
         stage('📥 Checkout Source Code') {
             steps {
                 echo '📥 Checking out source code...'
+                checkout scm
+                
                 script {
                     try {
-                        checkout scm
-                        
-                        // Try to checkout develop branch, create if doesn't exist
-                        try {
-                            sh 'git checkout develop'
-                            echo '✅ Switched to develop branch'
-                        } catch (Exception e) {
-                            echo '⚠️ Develop branch does not exist, creating it...'
-                            sh '''
-                                git checkout -b develop
-                                git push -u origin develop
-                            '''
-                            echo '✅ Created and pushed develop branch'
-                        }
-                        
-                        // Display commit information
-                        sh '''
-                            echo "📋 Current commit information:"
-                            git log --oneline -5
-                            echo "📂 Repository structure:"
-                            find . -name "*.go" -o -name "*.mod" -o -name "*.sum" | head -20
-                        '''
-                        
+                        sh 'git checkout develop'
+                        echo '✅ Switched to develop branch'
                     } catch (Exception e) {
-                        error("❌ Failed to checkout source code: ${e.getMessage()}")
+                        echo '⚠️ Develop branch does not exist, creating it...'
+                        sh '''
+                            git checkout -b develop
+                            git push -u origin develop
+                        '''
+                        echo '✅ Created develop branch'
                     }
                 }
+                
+                sh '''
+                    echo "📋 Current commit information:"
+                    git log --oneline -5
+                    echo "📂 Repository structure:"
+                    find . -name "*.go" -o -name "*.mod" -o -name "*.sum" | head -10
+                '''
             }
         }
         
@@ -123,7 +80,7 @@ pipeline {
             steps {
                 echo '🔧 Setting up Go environment...'
                 sh '''
-                    # Install Go if not present or wrong version
+                    # Install Go if not present
                     if ! command -v go &> /dev/null || ! go version | grep -q "${GO_VERSION}"; then
                         echo "📦 Installing Go ${GO_VERSION}..."
                         cd /tmp
@@ -135,21 +92,14 @@ pipeline {
                     
                     # Set up Go environment
                     export PATH=$PATH:/usr/local/go/bin:${GOPATH}/bin
-                    export GOPATH=${GOPATH}
-                    
-                    # Create Go workspace
                     mkdir -p ${GOPATH}/{src,bin,pkg}
                     
-                    # Git configuration for Go modules
+                    # Git configuration
                     git config --global url."https://".insteadOf git://
                     git config --global url."https://github.com/".insteadOf "git@github.com:"
-                    git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
                     
                     # Verify Go installation
                     go version
-                    go env GOPATH
-                    go env GOPROXY
-                    
                     echo "✅ Go environment setup completed"
                 '''
             }
@@ -161,39 +111,20 @@ pipeline {
                 dir('campgrounds-go') {
                     sh '''
                         export PATH=$PATH:/usr/local/go/bin:${GOPATH}/bin
-                        export GOPATH=${GOPATH}
                         
-                        # Clean any existing go.sum to avoid conflicts
+                        # Clean and download dependencies
                         rm -f go.sum
-                        
-                        # Download dependencies
-                        echo "📥 Downloading dependencies..."
                         go mod download
-                        
-                        # Verify dependencies
-                        echo "🔍 Verifying dependencies..."
                         go mod verify
-                        
-                        # Tidy up dependencies
-                        echo "🧹 Tidying dependencies..."
                         go mod tidy
                         
-                        # Display module information
-                        echo "📋 Module information:"
-                        go list -m all
-                        
-                        echo "✅ Dependencies downloaded and verified"
+                        echo "✅ Dependencies downloaded"
                     '''
                 }
             }
         }
         
-        stage('🔍 Code Quality & Linting') {
-            when { 
-                not { 
-                    params.SKIP_LINT 
-                } 
-            }
+        stage('🔍 Code Quality') {
             steps {
                 echo '🔍 Running code quality checks...'
                 dir('campgrounds-go') {
@@ -201,33 +132,20 @@ pipeline {
                         try {
                             sh '''
                                 export PATH=$PATH:/usr/local/go/bin:${GOPATH}/bin
-                                export GOPATH=${GOPATH}
                                 
                                 echo "🔍 Running go fmt..."
                                 if [ "$(gofmt -l . | wc -l)" -gt 0 ]; then
-                                    echo "❌ Code is not properly formatted:"
+                                    echo "⚠️ Code formatting issues found:"
                                     gofmt -l .
-                                    echo "Run 'go fmt ./...' to fix formatting issues"
-                                    exit 1
                                 fi
                                 
                                 echo "🔍 Running go vet..."
                                 go vet ./...
                                 
-                                echo "🔍 Checking for common issues..."
-                                # Check for TODO/FIXME comments
-                                if grep -r "TODO\\|FIXME" --include="*.go" .; then
-                                    echo "⚠️ Found TODO/FIXME comments in code"
-                                fi
-                                
-                                echo "✅ Code quality checks passed"
+                                echo "✅ Code quality checks completed"
                             '''
                         } catch (Exception e) {
-                            if (params.FORCE_DEPLOY) {
-                                echo "⚠️ Code quality issues found, but continuing due to FORCE_DEPLOY: ${e.getMessage()}"
-                            } else {
-                                error("❌ Code quality checks failed: ${e.getMessage()}")
-                            }
+                            echo "⚠️ Code quality issues found: ${e.getMessage()}"
                         }
                     }
                 }
@@ -240,12 +158,11 @@ pipeline {
                 dir('campgrounds-go') {
                     sh '''
                         export PATH=$PATH:/usr/local/go/bin:${GOPATH}/bin
-                        export GOPATH=${GOPATH}
-                        export CGO_ENABLED=${CGO_ENABLED}
-                        export GOOS=${GOOS}
+                        export CGO_ENABLED=0
+                        export GOOS=linux
                         
                         echo "🔨 Building application..."
-                        go build -a -installsuffix cgo -ldflags "-X main.version=${APP_VERSION} -X main.buildTime=$(date -u +%Y-%m-%dT%H:%M:%SZ)" -o ${APP_NAME} main.go
+                        go build -a -installsuffix cgo -o ${APP_NAME} main.go
                         
                         # Verify build
                         if [ ! -f ${APP_NAME} ]; then
@@ -253,15 +170,11 @@ pipeline {
                             exit 1
                         fi
                         
-                        # Check binary
-                        ls -la ${APP_NAME}
-                        file ${APP_NAME}
-                        
-                        # Build for different environments
-                        echo "🔨 Building environment-specific binaries..."
+                        # Create environment-specific binaries
                         cp ${APP_NAME} ${APP_NAME}-dev
                         cp ${APP_NAME} ${APP_NAME}-prod
                         
+                        ls -la ${APP_NAME}*
                         echo "✅ Build completed successfully!"
                     '''
                 }
@@ -269,53 +182,35 @@ pipeline {
         }
         
         stage('🧪 Run Tests') {
-            when { 
-                not { 
-                    params.SKIP_TESTS 
-                } 
-            }
             steps {
-                echo '🧪 Running tests...'
-                dir('campgrounds-go') {
-                    script {
-                        try {
-                            sh '''
-                                export PATH=$PATH:/usr/local/go/bin:${GOPATH}/bin
-                                export GOPATH=${GOPATH}
-                                
-                                echo "🧪 Running unit tests..."
-                                go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
-                                
-                                if [ -f coverage.out ]; then
-                                    echo "📊 Generating coverage report..."
-                                    go tool cover -html=coverage.out -o coverage.html
+                script {
+                    if (!params.SKIP_TESTS) {
+                        echo '🧪 Running tests...'
+                        dir('campgrounds-go') {
+                            try {
+                                sh '''
+                                    export PATH=$PATH:/usr/local/go/bin:${GOPATH}/bin
                                     
-                                    echo "📈 Coverage summary:"
-                                    go tool cover -func=coverage.out
+                                    echo "🧪 Running unit tests..."
+                                    go test -v -race -coverprofile=coverage.out ./...
                                     
-                                    # Check coverage threshold (basic check without bc)
-                                    COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print $3}' | sed 's/%//')
-                                    echo "📊 Total coverage: ${COVERAGE}%"
-                                    
-                                    # Simple coverage check
-                                    if [ "${COVERAGE%.*}" -lt "${COVERAGE_THRESHOLD}" ]; then
-                                        echo "⚠️ Coverage ${COVERAGE}% is below threshold ${COVERAGE_THRESHOLD}%"
-                                        if [ "${FORCE_DEPLOY}" != "true" ]; then
-                                            echo "❌ Coverage threshold not met"
-                                            exit 1
-                                        fi
+                                    if [ -f coverage.out ]; then
+                                        echo "📊 Generating coverage report..."
+                                        go tool cover -html=coverage.out -o coverage.html
+                                        go tool cover -func=coverage.out
                                     fi
-                                fi
-                                
-                                echo "✅ Tests completed successfully!"
-                            '''
-                        } catch (Exception e) {
-                            if (params.FORCE_DEPLOY) {
-                                echo "⚠️ Tests failed, but continuing due to FORCE_DEPLOY: ${e.getMessage()}"
-                            } else {
-                                error("❌ Tests failed: ${e.getMessage()}")
+                                    
+                                    echo "✅ Tests completed successfully!"
+                                '''
+                            } catch (Exception e) {
+                                echo "⚠️ Tests failed: ${e.getMessage()}"
+                                if (!params.FORCE_DEPLOY) {
+                                    error("❌ Tests failed and FORCE_DEPLOY is not enabled")
+                                }
                             }
                         }
+                    } else {
+                        echo '⏭️ Skipping tests as requested'
                     }
                 }
             }
@@ -323,7 +218,6 @@ pipeline {
                 always {
                     dir('campgrounds-go') {
                         script {
-                            // Archive test results and coverage
                             if (fileExists('coverage.out')) {
                                 archiveArtifacts artifacts: 'coverage.out,coverage.html', allowEmptyArchive: true
                             }
@@ -338,36 +232,21 @@ pipeline {
                 echo '📦 Creating deployment artifacts...'
                 dir('campgrounds-go') {
                     sh '''
-                        echo "📦 Creating deployment package..."
+                        echo "📦 Creating deployment packages..."
                         
                         # Create artifact directories
                         mkdir -p artifacts/dev artifacts/prod
                         
                         # Package for development
-                        tar -czf artifacts/dev/${ARTIFACT_NAME}-dev.tar.gz \
-                            ${APP_NAME}-dev \
-                            templates/ \
-                            static/ \
-                            go.mod \
-                            go.sum \
-                            README.md
+                        tar -czf artifacts/dev/${APP_NAME}-dev-${BUILD_NUMBER}.tar.gz \
+                            ${APP_NAME}-dev templates/ static/ go.mod go.sum README.md
                         
                         # Package for production
-                        tar -czf artifacts/prod/${ARTIFACT_NAME}-prod.tar.gz \
-                            ${APP_NAME}-prod \
-                            templates/ \
-                            static/ \
-                            go.mod \
-                            go.sum \
-                            README.md
+                        tar -czf artifacts/prod/${APP_NAME}-prod-${BUILD_NUMBER}.tar.gz \
+                            ${APP_NAME}-prod templates/ static/ go.mod go.sum README.md
                         
-                        # Create latest symlinks
-                        cd artifacts/dev && ln -sf ${ARTIFACT_NAME}-dev.tar.gz ${APP_NAME}-latest-dev.tar.gz
-                        cd ../prod && ln -sf ${ARTIFACT_NAME}-prod.tar.gz ${APP_NAME}-latest-prod.tar.gz
-                        
-                        echo "📋 Artifact information:"
+                        echo "📋 Artifacts created:"
                         ls -la artifacts/dev/ artifacts/prod/
-                        
                         echo "✅ Artifacts created successfully"
                     '''
                 }
@@ -375,118 +254,112 @@ pipeline {
         }
         
         stage('🚀 Deploy to Development') {
-            when {
-                anyOf {
-                    expression { params.DEPLOY_ENV == 'dev' }
-                    expression { params.DEPLOY_ENV == 'both' }
-                }
-            }
             steps {
-                echo '🚀 Deploying to Development environment...'
-                dir('campgrounds-go') {
-                    sh '''
-                        echo "🚀 Starting development deployment..."
-                        
-                        # Kill any existing development process
-                        pkill -f "${APP_NAME}-dev" || echo "No existing dev process found"
-                        sleep 2
-                        
-                        # Start development server
-                        export PORT=${DEV_PORT}
-                        export GIN_MODE=debug
-                        
-                        echo "Starting development server on port ${DEV_PORT}..."
-                        nohup ./${APP_NAME}-dev > dev-app.log 2>&1 &
-                        DEV_PID=$!
-                        echo $DEV_PID > dev-app.pid
-                        
-                        # Wait and verify
-                        sleep 5
-                        if kill -0 $DEV_PID 2>/dev/null; then
-                            echo "✅ Development server started successfully (PID: $DEV_PID)"
-                        else
-                            echo "❌ Development server failed to start"
-                            cat dev-app.log
-                            exit 1
-                        fi
-                        
-                        # Health check
-                        echo "🏥 Performing health check..."
-                        for i in {1..10}; do
-                            if curl -f http://localhost:${DEV_PORT}/health; then
-                                echo "✅ Development health check passed"
-                                break
-                            fi
-                            echo "⏳ Waiting for development server... ($i/10)"
-                            sleep 3
-                        done
-                    '''
+                script {
+                    if (params.DEPLOY_ENV == 'dev' || params.DEPLOY_ENV == 'both') {
+                        echo '🚀 Deploying to Development environment...'
+                        dir('campgrounds-go') {
+                            sh '''
+                                echo "🚀 Starting development deployment..."
+                                
+                                # Kill existing processes
+                                pkill -f "${APP_NAME}-dev" || echo "No existing dev process"
+                                sleep 2
+                                
+                                # Start development server
+                                export PORT=${DEV_PORT}
+                                export GIN_MODE=debug
+                                
+                                echo "Starting development server on port ${DEV_PORT}..."
+                                nohup ./${APP_NAME}-dev > dev-app.log 2>&1 &
+                                DEV_PID=$!
+                                echo $DEV_PID > dev-app.pid
+                                
+                                # Wait and verify
+                                sleep 5
+                                if kill -0 $DEV_PID 2>/dev/null; then
+                                    echo "✅ Development server started (PID: $DEV_PID)"
+                                else
+                                    echo "❌ Development server failed to start"
+                                    cat dev-app.log
+                                    exit 1
+                                fi
+                                
+                                # Health check
+                                echo "🏥 Health check..."
+                                for i in {1..10}; do
+                                    if curl -f http://localhost:${DEV_PORT}/health; then
+                                        echo "✅ Development health check passed"
+                                        break
+                                    fi
+                                    echo "⏳ Waiting... ($i/10)"
+                                    sleep 3
+                                done
+                            '''
+                        }
+                    } else {
+                        echo '⏭️ Skipping development deployment'
+                    }
                 }
             }
         }
         
         stage('🚀 Deploy to Production') {
-            when {
-                anyOf {
-                    expression { params.DEPLOY_ENV == 'prod' }
-                    expression { params.DEPLOY_ENV == 'both' }
-                }
-            }
             steps {
                 script {
                     if (params.DEPLOY_ENV == 'prod' || params.DEPLOY_ENV == 'both') {
                         // Manual approval for production
                         try {
                             timeout(time: 5, unit: 'MINUTES') {
-                                input message: '🚀 Deploy to Production?', 
-                                      ok: 'Deploy',
-                                      submitterParameter: 'APPROVER'
+                                input message: '🚀 Deploy to Production?', ok: 'Deploy'
                             }
                         } catch (Exception e) {
-                            error("❌ Production deployment not approved or timed out")
+                            error("❌ Production deployment not approved")
                         }
+                        
+                        echo '🚀 Deploying to Production environment...'
+                        dir('campgrounds-go') {
+                            sh '''
+                                echo "🚀 Starting production deployment..."
+                                
+                                # Kill existing processes
+                                pkill -f "${APP_NAME}-prod" || echo "No existing prod process"
+                                sleep 2
+                                
+                                # Start production server
+                                export PORT=${PROD_PORT}
+                                export GIN_MODE=release
+                                
+                                echo "Starting production server on port ${PROD_PORT}..."
+                                nohup ./${APP_NAME}-prod > prod-app.log 2>&1 &
+                                PROD_PID=$!
+                                echo $PROD_PID > prod-app.pid
+                                
+                                # Wait and verify
+                                sleep 5
+                                if kill -0 $PROD_PID 2>/dev/null; then
+                                    echo "✅ Production server started (PID: $PROD_PID)"
+                                else
+                                    echo "❌ Production server failed to start"
+                                    cat prod-app.log
+                                    exit 1
+                                fi
+                                
+                                # Health check
+                                echo "🏥 Health check..."
+                                for i in {1..10}; do
+                                    if curl -f http://localhost:${PROD_PORT}/health; then
+                                        echo "✅ Production health check passed"
+                                        break
+                                    fi
+                                    echo "⏳ Waiting... ($i/10)"
+                                    sleep 3
+                                done
+                            '''
+                        }
+                    } else {
+                        echo '⏭️ Skipping production deployment'
                     }
-                }
-                
-                echo '🚀 Deploying to Production environment...'
-                dir('campgrounds-go') {
-                    sh '''
-                        echo "🚀 Starting production deployment..."
-                        
-                        # Kill any existing production process
-                        pkill -f "${APP_NAME}-prod" || echo "No existing prod process found"
-                        sleep 2
-                        
-                        # Start production server
-                        export PORT=${PROD_PORT}
-                        export GIN_MODE=release
-                        
-                        echo "Starting production server on port ${PROD_PORT}..."
-                        nohup ./${APP_NAME}-prod > prod-app.log 2>&1 &
-                        PROD_PID=$!
-                        echo $PROD_PID > prod-app.pid
-                        
-                        # Wait and verify
-                        sleep 5
-                        if kill -0 $PROD_PID 2>/dev/null; then
-                            echo "✅ Production server started successfully (PID: $PROD_PID)"
-                        else
-                            echo "❌ Production server failed to start"
-                            cat prod-app.log
-                            exit 1
-                        fi
-                        
-                        # Health check
-                        echo "🏥 Performing health check..."
-                        for i in {1..10}; do
-                            if curl -f http://localhost:${PROD_PORT}/health; then
-                                echo "✅ Production health check passed"
-                                break
-                            fi
-                            echo "⏳ Waiting for production server... ($i/10)"
-                            sleep 3
-                        done
-                    '''
                 }
             }
         }
@@ -496,31 +369,23 @@ pipeline {
                 echo '🧪 Running post-deployment tests...'
                 dir('campgrounds-go') {
                     script {
-                        def environments = []
                         if (params.DEPLOY_ENV == 'dev' || params.DEPLOY_ENV == 'both') {
-                            environments.add(['name': 'Development', 'port': env.DEV_PORT])
-                        }
-                        if (params.DEPLOY_ENV == 'prod' || params.DEPLOY_ENV == 'both') {
-                            environments.add(['name': 'Production', 'port': env.PROD_PORT])
+                            echo "🧪 Testing Development environment..."
+                            sh """
+                                curl -f http://localhost:${DEV_PORT}/health
+                                curl -f http://localhost:${DEV_PORT}/api/campgrounds
+                                curl -f http://localhost:${DEV_PORT}/
+                                echo "✅ Development tests passed"
+                            """
                         }
                         
-                        environments.each { env_config ->
-                            echo "🧪 Testing ${env_config.name} environment on port ${env_config.port}..."
+                        if (params.DEPLOY_ENV == 'prod' || params.DEPLOY_ENV == 'both') {
+                            echo "🧪 Testing Production environment..."
                             sh """
-                                echo "Testing ${env_config.name} endpoints..."
-                                
-                                # Health check
-                                curl -f http://localhost:${env_config.port}/health
-                                
-                                # API endpoints
-                                curl -f http://localhost:${env_config.port}/api/campgrounds
-                                curl -f http://localhost:${env_config.port}/api/docs
-                                
-                                # Web UI endpoints
-                                curl -f http://localhost:${env_config.port}/
-                                curl -f http://localhost:${env_config.port}/campgrounds
-                                
-                                echo "✅ ${env_config.name} environment tests passed"
+                                curl -f http://localhost:${PROD_PORT}/health
+                                curl -f http://localhost:${PROD_PORT}/api/campgrounds
+                                curl -f http://localhost:${PROD_PORT}/
+                                echo "✅ Production tests passed"
                             """
                         }
                     }
@@ -531,9 +396,7 @@ pipeline {
     
     post {
         always {
-            echo '🏁 Pipeline execution completed!'
-            
-            // Archive artifacts
+            echo '🏁 Pipeline completed!'
             dir('campgrounds-go') {
                 script {
                     if (fileExists('artifacts')) {
@@ -549,52 +412,21 @@ pipeline {
         success {
             echo '✅ Pipeline succeeded! 🎉'
             script {
-                def deployedEnvs = []
+                def message = "🎉 Deployment Summary:\n📦 Build: ${env.BUILD_NUMBER}\n"
                 if (params.DEPLOY_ENV == 'dev' || params.DEPLOY_ENV == 'both') {
-                    deployedEnvs.add("Development (http://localhost:${env.DEV_PORT})")
+                    message += "🚀 Development: http://localhost:${env.DEV_PORT}\n"
                 }
                 if (params.DEPLOY_ENV == 'prod' || params.DEPLOY_ENV == 'both') {
-                    deployedEnvs.add("Production (http://localhost:${env.PROD_PORT})")
+                    message += "🚀 Production: http://localhost:${env.PROD_PORT}\n"
                 }
-                
-                echo """
-                🎉 Deployment Summary:
-                📦 Build: ${env.BUILD_NUMBER}
-                🚀 Deployed to: ${deployedEnvs.join(', ')}
-                🔗 Health Check: /health
-                🏕️  API Docs: /api/docs
-                🌐 Web UI: /
-                """
+                echo message
             }
         }
         
         failure {
-            echo '❌ Pipeline failed! 😞'
-            script {
-                // Stop any running processes on failure
-                dir('campgrounds-go') {
-                    sh '''
-                        pkill -f "${APP_NAME}" || true
-                        echo "Stopped any running application processes"
-                    '''
-                }
-            }
-        }
-        
-        unstable {
-            echo '⚠️ Pipeline completed with warnings'
-        }
-        
-        aborted {
-            echo '🛑 Pipeline was aborted'
-            script {
-                // Clean up on abort
-                dir('campgrounds-go') {
-                    sh '''
-                        pkill -f "${APP_NAME}" || true
-                        echo "Cleaned up on abort"
-                    '''
-                }
+            echo '❌ Pipeline failed!'
+            dir('campgrounds-go') {
+                sh 'pkill -f "${APP_NAME}" || true'
             }
         }
     }

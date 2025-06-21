@@ -49,7 +49,8 @@ func (ac *AuthController) Register(c *gin.Context) {
 		return
 	}
 
-	token, err := utils.GenerateJWTToken(user.ID)
+	// FIX: Convert ObjectID to string using .Hex()
+	token, err := utils.GenerateJWTToken(user.ID.Hex())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate token"})
 		return
@@ -62,7 +63,7 @@ func (ac *AuthController) Register(c *gin.Context) {
 	})
 }
 
-// Web Registration - Fixed with better error handling
+// Web Registration
 func (ac *AuthController) RegisterWeb(c *gin.Context) {
 	username := c.PostForm("username")
 	email := c.PostForm("email")
@@ -104,7 +105,8 @@ func (ac *AuthController) RegisterWeb(c *gin.Context) {
 		return
 	}
 
-	token, err := utils.GenerateJWTToken(user.ID)
+	// FIX: Convert ObjectID to string using .Hex()
+	token, err := utils.GenerateJWTToken(user.ID.Hex())
 	if err != nil {
 		log.Printf("❌ Error generating token: %v", err)
 		c.HTML(http.StatusInternalServerError, "register.html", gin.H{
@@ -116,11 +118,10 @@ func (ac *AuthController) RegisterWeb(c *gin.Context) {
 
 	log.Printf("✅ User registered successfully: %s", username)
 
-	// Set secure cookie with proper settings
+	// Set secure cookie
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("token", token, 3600*24*7, "/", "", false, true) // 7 days, httpOnly
+	c.SetCookie("token", token, 3600*24*7, "/", "", false, true)
 	
-	// Redirect to campgrounds page
 	c.Redirect(http.StatusSeeOther, "/campgrounds")
 }
 
@@ -145,8 +146,8 @@ func (ac *AuthController) Login(c *gin.Context) {
 		return
 	}
 
-	// Use the integrated JWT generation
-	token, err := utils.GenerateJWTToken(user.ID)
+	// FIX: Convert ObjectID to string using .Hex()
+	token, err := utils.GenerateJWTToken(user.ID.Hex())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not generate token"})
 		return
@@ -159,7 +160,7 @@ func (ac *AuthController) Login(c *gin.Context) {
 	})
 }
 
-// Web Login - Fixed with comprehensive logging
+// Web Login
 func (ac *AuthController) LoginWeb(c *gin.Context) {
 	username := c.PostForm("username")
 	password := c.PostForm("password")
@@ -195,8 +196,8 @@ func (ac *AuthController) LoginWeb(c *gin.Context) {
 		return
 	}
 
-	// Use the integrated JWT generation
-	token, err := utils.GenerateJWTToken(user.ID)
+	// FIX: Convert ObjectID to string using .Hex()
+	token, err := utils.GenerateJWTToken(user.ID.Hex())
 	if err != nil {
 		log.Printf("❌ Login failed - Token generation error: %v", err)
 		c.HTML(http.StatusInternalServerError, "login.html", gin.H{
@@ -208,20 +209,18 @@ func (ac *AuthController) LoginWeb(c *gin.Context) {
 
 	log.Printf("✅ Login successful for user: %s (ID: %s)", username, user.ID.Hex())
 
-	// Set secure cookie with proper settings
+	// Set secure cookie
 	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie("token", token, 3600*24*7, "/", "", false, true) // 7 days, httpOnly
+	c.SetCookie("token", token, 3600*24*7, "/", "", false, true)
 	
 	log.Printf("🍪 Cookie set for user: %s", username)
 	
-	// Redirect to campgrounds page
 	c.Redirect(http.StatusSeeOther, "/campgrounds")
 }
 
 // Logout
 func (ac *AuthController) Logout(c *gin.Context) {
 	log.Printf("🚪 User logging out")
-	// Clear the cookie
 	c.SetSameSite(http.SameSiteLaxMode)
 	c.SetCookie("token", "", -1, "/", "", false, true)
 	c.Redirect(http.StatusSeeOther, "/")

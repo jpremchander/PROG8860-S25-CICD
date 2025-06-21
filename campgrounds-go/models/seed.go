@@ -7,6 +7,7 @@ import (
 
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
+	"go.mongodb.org/mongo-driver/mongo"
 	"yelpcamp-go/config"
 )
 
@@ -33,7 +34,9 @@ func ForceSeedData() {
 	log.Println("✅ Cleared existing data")
 	
 	// Seed fresh data
-	SeedData()
+	if err := SeedDatabase(db); err != nil {
+		log.Printf("❌ Error seeding database: %v", err)
+	}
 }
 
 // SeedData creates sample users, campgrounds, and reviews for development
@@ -174,7 +177,7 @@ func SeedData() {
 			AuthorID:    userIDs[3], // alice
 			Images: []Image{
 				{
-					URL:      "https://images.unsplash.com/photo-1506197603052-3cc9c3a201bd?w=800&h=600&fit=crop&crop=center",
+					URL:      "https://images.unsplash.com/photo-1508873696983-2dfd5898f08b?w=800&h=600&fit=crop&crop=center",
 					Filename: "yosemite-valley.jpg",
 					Key:      "yelpcamp/yosemite-1",
 				},
@@ -191,7 +194,7 @@ func SeedData() {
 			AuthorID:    userIDs[4], // charlie
 			Images: []Image{
 				{
-					URL:      "https://images.unsplash.com/photo-1445308394109-4ec2920981b1?w=800&h=600&fit=crop&crop=center",
+					URL:      "https://images.unsplash.com/photo-1445308396983-4ec2920981b1?w=800&h=600&fit=crop&crop=center",
 					Filename: "glacier-mountains.jpg",
 					Key:      "yelpcamp/glacier-1",
 				},
@@ -352,4 +355,195 @@ func SeedData() {
 	log.Println("   Password: password123")
 	log.Println("")
 	log.Println("🌐 Visit http://localhost:3000/campgrounds to see the campgrounds!")
+}
+
+func SeedDatabase(db *mongo.Database) error {
+	log.Println("🌱 Starting database seeding...")
+
+	// Check if campgrounds already exist
+	campgroundsCollection := db.Collection("campgrounds")
+	count, err := campgroundsCollection.CountDocuments(context.Background(), bson.M{})
+	if err != nil {
+		log.Printf("❌ Error counting campgrounds: %v", err)
+		return err
+	}
+
+	if count > 0 {
+		log.Printf("✅ Database already has %d campgrounds, skipping seed", count)
+		return nil
+	}
+
+	// Create a test user first
+	usersCollection := db.Collection("users")
+	userCount, err := usersCollection.CountDocuments(context.Background(), bson.M{})
+	if err != nil {
+		log.Printf("❌ Error counting users: %v", err)
+		return err
+	}
+
+	var testUserID primitive.ObjectID
+	if userCount == 0 {
+		// Create test user
+		testUser := User{
+			ID:       primitive.NewObjectID(),
+			Username: "testuser",
+			Email:    "test@example.com",
+			Password: "password123", // This will be hashed by the Create method
+		}
+
+		if err := testUser.Create(db); err != nil {
+			log.Printf("❌ Error creating test user: %v", err)
+			return err
+		}
+		testUserID = testUser.ID
+		log.Printf("✅ Created test user: %s", testUser.Username)
+	} else {
+		// Get existing user
+		var existingUser User
+		err := usersCollection.FindOne(context.Background(), bson.M{}).Decode(&existingUser)
+		if err != nil {
+			log.Printf("❌ Error finding existing user: %v", err)
+			return err
+		}
+		testUserID = existingUser.ID
+		log.Printf("✅ Using existing user: %s", existingUser.Username)
+	}
+
+	// Sample campgrounds data with better images
+	campgrounds := []Campground{
+		{
+			ID:          primitive.NewObjectID(),
+			Title:       "Mountain View Campground",
+			Description: "A beautiful campground with stunning mountain views and hiking trails nearby. Perfect for families and outdoor enthusiasts.",
+			Location:    "Rocky Mountain National Park, Colorado",
+			Price:       45.00,
+			AuthorID:    testUserID,
+			Images: []Image{
+				{
+					URL:      "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=800&h=600&fit=crop",
+					Filename: "mountain-campground.jpg",
+					Key:      "mountain-campground-1",
+				},
+				{
+					URL:      "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&h=600&fit=crop",
+					Filename: "mountain-view.jpg",
+					Key:      "mountain-view-1",
+				},
+			},
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		},
+		{
+			ID:          primitive.NewObjectID(),
+			Title:       "Lakeside Paradise",
+			Description: "Peaceful lakeside camping with crystal clear water, fishing opportunities, and beautiful sunsets. Ideal for a relaxing getaway.",
+			Location:    "Lake Tahoe, California",
+			Price:       55.00,
+			AuthorID:    testUserID,
+			Images: []Image{
+				{
+					URL:      "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop",
+					Filename: "lakeside-camp.jpg",
+					Key:      "lakeside-camp-1",
+				},
+				{
+					URL:      "https://images.unsplash.com/photo-1486022119026-e4b9e0c5b7e9?w=800&h=600&fit=crop",
+					Filename: "lake-sunset.jpg",
+					Key:      "lake-sunset-1",
+				},
+			},
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		},
+		{
+			ID:          primitive.NewObjectID(),
+			Title:       "Forest Haven",
+			Description: "Deep in the forest with towering trees, wildlife viewing, and peaceful nature sounds. A true escape from city life.",
+			Location:    "Olympic National Forest, Washington",
+			Price:       35.00,
+			AuthorID:    testUserID,
+			Images: []Image{
+				{
+					URL:      "https://images.unsplash.com/photo-1508873696983-2dfd5898f08b?w=800&h=600&fit=crop",
+					Filename: "forest-camp.jpg",
+					Key:      "forest-camp-1",
+				},
+				{
+					URL:      "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&h=600&fit=crop",
+					Filename: "forest-trees.jpg",
+					Key:      "forest-trees-1",
+				},
+			},
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		},
+		{
+			ID:          primitive.NewObjectID(),
+			Title:       "Desert Oasis",
+			Description: "Unique desert camping experience with stargazing opportunities, cacti gardens, and stunning sunrise views.",
+			Location:    "Joshua Tree National Park, California",
+			Price:       40.00,
+			AuthorID:    testUserID,
+			Images: []Image{
+				{
+					URL:      "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop",
+					Filename: "desert-camp.jpg",
+					Key:      "desert-camp-1",
+				},
+				{
+					URL:      "https://images.unsplash.com/photo-1445308396983-4ec2920981b1?w=800&h=600&fit=crop",
+					Filename: "desert-stars.jpg",
+					Key:      "desert-stars-1",
+				},
+			},
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		},
+		{
+			ID:          primitive.NewObjectID(),
+			Title:       "Riverside Retreat",
+			Description: "Camping along a gentle river with fishing, kayaking, and swimming opportunities. Great for water activities.",
+			Location:    "Yellowstone National Park, Wyoming",
+			Price:       50.00,
+			AuthorID:    testUserID,
+			Images: []Image{
+				{
+					URL:      "https://images.unsplash.com/photo-1486022116645-74489c95b41b?w=800&h=600&fit=crop",
+					Filename: "riverside-camp.jpg",
+					Key:      "riverside-camp-1",
+				},
+				{
+					URL:      "https://images.unsplash.com/photo-1508873696983-2dfd5898f08b?w=800&h=600&fit=crop",
+					Filename: "river-view.jpg",
+					Key:      "river-view-1",
+				},
+			},
+			CreatedAt: time.Now(),
+			UpdatedAt: time.Now(),
+		},
+	}
+
+	// Insert campgrounds
+	var campgroundDocs []interface{}
+	for _, campground := range campgrounds {
+		campgroundDocs = append(campgroundDocs, campground)
+	}
+
+	result, err := campgroundsCollection.InsertMany(context.Background(), campgroundDocs)
+	if err != nil {
+		log.Printf("❌ Error inserting campgrounds: %v", err)
+		return err
+	}
+
+	log.Printf("✅ Successfully seeded %d campgrounds", len(result.InsertedIDs))
+
+	// Verify the data was inserted
+	finalCount, err := campgroundsCollection.CountDocuments(context.Background(), bson.M{})
+	if err != nil {
+		log.Printf("⚠️ Warning: Could not verify campground count: %v", err)
+	} else {
+		log.Printf("🎉 Database now contains %d campgrounds total", finalCount)
+	}
+
+	return nil
 }

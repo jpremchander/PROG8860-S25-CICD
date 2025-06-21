@@ -43,7 +43,7 @@ go run main.go
 
 ### Campgrounds Listing Screenshot
 \`\`\`
-[SCREENSHOT: Grid of campground cards with images and details]
+![alt text](screenshots/campgrounds.png)
 \`\`\`
 
 ---
@@ -93,10 +93,16 @@ campgrounds-go/
 | 🏭 **Deploy Prod** | Manual approval for production | ✅ |
 
 ### Jenkins Pipeline Success Screenshot
+
+## DEV ##
 \`\`\`
-[SCREENSHOT: Jenkins pipeline showing all 10 stages completed successfully]
+![alt text](screenshots/Jenkins-Job-BO.png)
 \`\`\`
 
+## PROD ##
+\`\`\`
+![alt text](screenshots/prod-jenkinsjob.png)
+\`\`\`
 ---
 
 ## 🧪 Testing Framework
@@ -114,9 +120,22 @@ go tool cover -html=coverage.out -o coverage.html
 \`\`\`
 
 ### Test Results Screenshot
+## lint ##
 \`\`\`
-[SCREENSHOT: Test execution showing 6/6 tests passed with coverage report]
+![alt text](screenshots/lint.png)
 \`\`\`
+
+## tests ##
+\`\`\`
+![alt text](screenshots/tests.png)
+\`\`\`
+
+## env tests ##
+\`\`\`
+![alt text](screenshots/env-tests-1.png)
+![alt text](screenshots/env-tests-2.png)
+\`\`\`
+
 
 ---
 
@@ -144,7 +163,7 @@ The pipeline supports deployment to two environments:
 
 ### Multi-Environment Deployment Screenshot
 \`\`\`
-[SCREENSHOT: Both development and production environments running]
+![alt text](screenshots/dev-prod-job.png)
 \`\`\`
 
 ---
@@ -165,7 +184,7 @@ Each artifact includes the compiled binary, templates, static assets, and deploy
 
 ### S3 Artifacts Screenshot
 \`\`\`
-[SCREENSHOT: AWS S3 console showing uploaded build artifacts]
+![alt text](screenshots/s3.png)
 \`\`\`
 
 ---

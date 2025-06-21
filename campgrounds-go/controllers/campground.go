@@ -3,6 +3,7 @@ package controllers
 import (
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -65,7 +66,7 @@ func (cc *CampgroundController) GetByID(c *gin.Context) {
 }
 
 // Helper function to save uploaded images to local storage
-func (cc *CampgroundController) saveUploadedImage(fileHeader *gin.FileHeader, userID string, index int) (*models.Image, error) {
+func (cc *CampgroundController) saveUploadedImage(fileHeader *multipart.FileHeader, userID string, index int) (*models.Image, error) {
 	// Create uploads directory if it doesn't exist
 	uploadDir := "static/uploads"
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {

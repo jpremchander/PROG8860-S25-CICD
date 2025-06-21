@@ -6,7 +6,7 @@
 
 ## 🎯 Project Overview
 
-YelpCamp Go is a full-stack web application for campground reviews built with **Go (Gin framework)** featuring a complete **CI/CD pipeline** using **Jenkins**, **Docker**, and **AWS S3**.
+YelpCamp Go is a full-stack web application for where users can view, create and update the campgrounds built with **Go (Gin framework)** featuring a complete **CI/CD pipeline** using **Jenkins**, **Docker**, and **AWS S3**.
 
 ### Homepage Screenshot
 \`\`\`
@@ -29,7 +29,7 @@ YelpCamp Go is a full-stack web application for campground reviews built with **
 
 ## 🚀 Quick Start #
 
-\`\`\`bash
+\`\`\`
 # Clone and run locally
 git clone <repo-url>
 cd campgrounds-go
@@ -118,7 +118,7 @@ campgrounds-go/
 - Error handling verification
 - Invalid input testing
 
-\`\`\`bash
+\`\`\`
 # Run tests locally
 go test -v -coverprofile=coverage.out ./...
 go tool cover -html=coverage.out -o coverage.html
@@ -218,18 +218,18 @@ The pipeline implements fail-fast behavior:
 ## 🔧 Troubleshooting
 
 **Docker Issues:**
-\`\`\`bash
+\`\`\`
 sudo usermod -aG docker $USER
 sudo systemctl restart docker
 \`\`\`
 
 **Test Failures:**
-\`\`\`bash
+\`\`\`
 go mod tidy && go test ./...
 \`\`\`
 
 **Port Conflicts:**
-\`\`\`bash
+\`\`\`
 docker stop $(docker ps -q --filter "publish=3001")
 docker stop $(docker ps -q --filter "publish=3000")
 \`\`\`

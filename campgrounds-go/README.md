@@ -35,10 +35,15 @@ git clone <repo-url>
 cd campgrounds-go
 go run main.go
 
-# Access application
-# Web: http://localhost:3000
-# API: http://localhost:3000/api/campgrounds
-# Health: http://localhost:3000/health
+# Access DEV application
+ Web: http://localhost:3000
+ API: http://localhost:3000/api/campgrounds
+ Health: http://localhost:3000/health
+
+# Access PROD application
+ Web: http://localhost:3001
+ API: http://localhost:3001/api/campgrounds
+ Health: http://localhost:3001/health
 \`\`\`
 
 ### Campgrounds Listing Screenshot

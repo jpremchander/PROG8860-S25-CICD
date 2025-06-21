@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"log"
 	"net/http"
 	"strings"
 
@@ -10,6 +9,7 @@ import (
 	"yelpcamp-go/utils"
 )
 
+// AuthRequired middleware for API routes
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
@@ -20,93 +20,110 @@ func AuthRequired() gin.HandlerFunc {
 		}
 
 		tokenString := strings.Replace(authHeader, "Bearer ", "", 1)
-		
-		// Use the integrated JWT validation
-		userID, err := utils.ValidateJWTToken(tokenString)
+		if tokenString == "" {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Bearer token required"})
+			c.Abort()
+			return
+		}
+
+		claims, err := utils.ValidateJWTToken(tokenString)
 		if err != nil {
-			log.Printf("❌ API Auth failed: %v", err)
 			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid token"})
 			c.Abort()
 			return
 		}
 
-		userObjectID, err := primitive.ObjectIDFromHex(userID)
-		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user ID"})
+		// Extract user ID from claims
+		if userIDStr, ok := claims["user_id"].(string); ok {
+			if userID, err := primitive.ObjectIDFromHex(userIDStr); err == nil {
+				c.Set("user_id", userID)
+			} else {
+				c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid user ID in token"})
+				c.Abort()
+				return
+			}
+		} else {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "User ID not found in token"})
 			c.Abort()
 			return
 		}
 
-		c.Set("user_id", userObjectID)
 		c.Next()
 	}
 }
 
+// WebAuthRequired middleware for web routes
 func WebAuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Check for JWT token in cookie
-		tokenString, err := c.Cookie("token")
-		if err != nil {
-			log.Printf("🔐 No token cookie found, redirecting to login")
+		token, err := c.Cookie("token")
+		if err != nil || token == "" {
 			c.Redirect(http.StatusSeeOther, "/login")
 			c.Abort()
 			return
 		}
 
-		// Use the integrated JWT validation
-		userID, err := utils.ValidateJWTToken(tokenString)
+		claims, err := utils.ValidateJWTToken(token)
 		if err != nil {
-			log.Printf("🔐 Invalid token, clearing cookie and redirecting to login: %v", err)
-			// Clear invalid cookie
 			c.SetCookie("token", "", -1, "/", "", false, true)
 			c.Redirect(http.StatusSeeOther, "/login")
 			c.Abort()
 			return
 		}
 
-		userObjectID, err := primitive.ObjectIDFromHex(userID)
-		if err != nil {
-			log.Printf("🔐 Invalid user ID format: %s", userID)
+		// Extract user ID from claims
+		if userIDStr, ok := claims["user_id"].(string); ok {
+			if userID, err := primitive.ObjectIDFromHex(userIDStr); err == nil {
+				c.Set("user_id", userID)
+				c.Set("authenticated", true)
+			} else {
+				c.SetCookie("token", "", -1, "/", "", false, true)
+				c.Redirect(http.StatusSeeOther, "/login")
+				c.Abort()
+				return
+			}
+		} else {
 			c.SetCookie("token", "", -1, "/", "", false, true)
 			c.Redirect(http.StatusSeeOther, "/login")
 			c.Abort()
 			return
 		}
 
-		log.Printf("✅ Web Authentication successful for user ID: %s", userObjectID.Hex())
-		c.Set("user_id", userObjectID)
-		c.Set("authenticated", true)
 		c.Next()
 	}
 }
 
-// Optional auth - doesn't redirect if not authenticated
+// WebAuthOptional middleware for web routes that work with or without auth
 func WebAuthOptional() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		tokenString, err := c.Cookie("token")
-		if err != nil {
+		token, err := c.Cookie("token")
+		if err != nil || token == "" {
 			c.Set("authenticated", false)
 			c.Next()
 			return
 		}
 
-		// Use the integrated JWT validation
-		userID, err := utils.ValidateJWTToken(tokenString)
+		claims, err := utils.ValidateJWTToken(token)
 		if err != nil {
+			c.SetCookie("token", "", -1, "/", "", false, true)
 			c.Set("authenticated", false)
 			c.Next()
 			return
 		}
 
-		userObjectID, err := primitive.ObjectIDFromHex(userID)
-		if err != nil {
+		// Extract user ID from claims
+		if userIDStr, ok := claims["user_id"].(string); ok {
+			if userID, err := primitive.ObjectIDFromHex(userIDStr); err == nil {
+				c.Set("user_id", userID)
+				c.Set("authenticated", true)
+			} else {
+				c.SetCookie("token", "", -1, "/", "", false, true)
+				c.Set("authenticated", false)
+			}
+		} else {
+			c.SetCookie("token", "", -1, "/", "", false, true)
 			c.Set("authenticated", false)
-			c.Next()
-			return
 		}
 
-		c.Set("user_id", userObjectID)
-		c.Set("authenticated", true)
 		c.Next()
 	}
 }

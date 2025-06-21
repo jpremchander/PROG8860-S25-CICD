@@ -318,39 +318,25 @@ EOF
                 dir('campgrounds-go') {
                     sh '''
                         echo "🚀 Starting development deployment..."
-                        
+
                         # Stop existing dev container
                         docker stop campgrounds-dev || true
                         docker rm campgrounds-dev || true
-                        
-                        # Start development container with hot reload
+
+                        # Start development container with direct Go execution (no Air)
                         docker run -d \
                             --name campgrounds-dev \
-                            -p ${DEV_PORT}:3001 \
+                            -p 3001:3001 \
                             -e PORT=3001 \
                             -e GIN_MODE=debug \
+                            -w /app \
                             -v $(pwd):/app \
                             --restart unless-stopped \
-                            ${DOCKER_IMAGE}:dev-latest
-                        
-                        # Wait for container to start
+                            yelp-camp:dev-latest \
+                            go run main.go
+
                         echo "⏳ Waiting for development container to start..."
                         sleep 15
-                        
-                        # Health check with retry
-                        echo "🏥 Development health check..."
-                        for i in {1..10}; do
-                            if curl -f http://localhost:${DEV_PORT}/health 2>/dev/null; then
-                                echo "✅ Development health check passed"
-                                break
-                            fi
-                            echo "⏳ Waiting... ($i/10)"
-                            sleep 5
-                        done
-                        
-                        # Show container status
-                        docker ps | grep campgrounds-dev || echo "Container not found"
-                        echo "✅ Development deployment completed!"
                     '''
                 }
             }

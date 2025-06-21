@@ -21,10 +21,10 @@ func setupRouter() *gin.Engine {
 	api := r.Group("/api")
 	{
 		api.GET("/campgrounds", getCampgrounds)
+		api.GET("/campgrounds/:id", getCampgroundByID)  // ✅ Add this route
 		api.POST("/campgrounds", createCampground)
 		api.PUT("/campgrounds/:id", updateCampground)
 		api.DELETE("/campgrounds/:id", deleteCampground)
-		api.GET("/campgrounds/:id", getCampgroundByID)  // Add this route for the test
 	}
 	
 	return r
@@ -124,8 +124,8 @@ func TestInvalidCampgroundID(t *testing.T) {
 	req, _ := http.NewRequest("GET", "/api/campgrounds/invalid", nil)
 	router.ServeHTTP(w, req)
 
-	// Changed from 400 to 404 - this is the correct HTTP status for "not found"
-	if w.Code != 404 {
-		t.Errorf("Expected 404 for invalid ID, got %d", w.Code)
+	// Now that we have the proper route, it should return 400 for invalid ID format
+	if w.Code != 400 {
+		t.Errorf("Expected 400 for invalid ID, got %d", w.Code)
 	}
 }

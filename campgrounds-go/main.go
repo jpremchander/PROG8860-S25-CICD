@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"html/template"
 	"log"
@@ -14,7 +13,6 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// Campground represents a campground entity
 type Campground struct {
 	ID          int       `json:"id"`
 	Title       string    `json:"title"`
@@ -25,7 +23,6 @@ type Campground struct {
 	CreatedAt   time.Time `json:"created_at"`
 }
 
-// In-memory storage for demonstration
 var campgrounds = []Campground{
 	{
 		ID:          1,
@@ -57,58 +54,56 @@ var campgrounds = []Campground{
 }
 
 var nextID = 4
+var hasTemplates = false
 
 func main() {
-	// Load environment variables
 	if err := godotenv.Load(); err != nil {
 		log.Println("No .env file found, using system environment variables")
 	}
 
-	// Setup Gin router
 	r := gin.Default()
 
-	// Load HTML templates
-	r.SetHTMLTemplate(template.Must(template.New("").ParseGlob("templates/*")))
-	
-	// Serve static files
-	r.Static("/static", "./static")
+	// Check for templates and load them
+	if _, err := os.Stat("templates"); err == nil {
+		r.SetHTMLTemplate(template.Must(template.New("").ParseGlob("templates/*")))
+		hasTemplates = true
+		log.Println("✅ Templates loaded from templates/")
+	} else if _, err := os.Stat("views"); err == nil {
+		r.SetHTMLTemplate(template.Must(template.New("").ParseGlob("views/*")))
+		hasTemplates = true
+		log.Println("✅ Templates loaded from views/")
+	} else {
+		log.Println("⚠️  No templates directory found, API-only mode")
+	}
 
-	// Middleware
-	r.Use(gin.Logger())
-	r.Use(gin.Recovery())
+	// Serve static files (if they exist)
+	if _, err := os.Stat("static"); err == nil {
+		r.Static("/static", "./static")
+		log.Println("✅ Static files served from static/")
+	}
 
-	// CORS middleware for API
+	// CORS middleware
 	r.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
 		c.Header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
 		c.Header("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
 		}
-		
 		c.Next()
 	})
 
-	// Setup routes
-	setupRoutes(r)
+	// Health check
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":    "healthy",
+			"service":   "campgrounds-go",
+			"timestamp": time.Now().UTC(),
+			"version":   "1.0.0",
+		})
+	})
 
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "3000"
-	}
-
-	log.Printf("🚀 YelpCamp Go server starting on port %s", port)
-	log.Printf("📍 Environment: %s", os.Getenv("GIN_MODE"))
-	log.Printf("🌐 Web UI: http://localhost:%s", port)
-	log.Printf("🔗 Health check: http://localhost:%s/health", port)
-	log.Printf("🏕️  API: http://localhost:%s/api/campgrounds", port)
-	
-	log.Fatal(http.ListenAndServe(":"+port, r))
-}
-
-func setupRoutes(r *gin.Engine) {
 	// Web UI Routes
 	r.GET("/", homePage)
 	r.GET("/campgrounds", campgroundsPage)
@@ -118,17 +113,6 @@ func setupRoutes(r *gin.Engine) {
 	r.GET("/campgrounds/:id/edit", editCampgroundPage)
 	r.POST("/campgrounds/:id", updateCampgroundWeb)
 	r.POST("/campgrounds/:id/delete", deleteCampgroundWeb)
-
-	// Health check endpoint
-	r.GET("/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status":    "healthy",
-			"service":   "campgrounds-go",
-			"timestamp": time.Now().UTC(),
-			"uptime":    "running",
-			"version":   "1.0.0",
-		})
-	})
 
 	// API Routes
 	api := r.Group("/api")
@@ -140,80 +124,119 @@ func setupRoutes(r *gin.Engine) {
 		api.PUT("/campgrounds/:id", updateCampground)
 		api.DELETE("/campgrounds/:id", deleteCampground)
 	}
+
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "3000"
+	}
+
+	log.Printf("🚀 YelpCamp Go server starting on port %s", port)
+	log.Printf("📍 Environment: %s", os.Getenv("GIN_MODE"))
+	log.Printf("🌐 Web UI: http://localhost:%s", port)
+	log.Printf("🔗 Health check: http://localhost:%s/health", port)
+	log.Printf("🏕️  API: http://localhost:%s/api/campgrounds", port)
+
+	log.Fatal(http.ListenAndServe(":"+port, r))
 }
 
 // Web UI Handlers
 func homePage(c *gin.Context) {
-	c.HTML(http.StatusOK, "home.html", gin.H{
-		"title": "YelpCamp - Find Your Perfect Campground",
-	})
+	if hasTemplates {
+		c.HTML(http.StatusOK, "home.html", gin.H{
+			"title": "YelpCamp - Find Your Perfect Campground",
+		})
+	} else {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Welcome to YelpCamp API",
+			"endpoints": map[string]string{
+				"GET /api/campgrounds":     "List all campgrounds",
+				"GET /api/campgrounds/:id": "Get campground by ID",
+				"POST /api/campgrounds":    "Create new campground",
+			},
+		})
+	}
 }
 
 func campgroundsPage(c *gin.Context) {
-	c.HTML(http.StatusOK, "campgrounds.html", gin.H{
-		"title":       "All Campgrounds",
-		"campgrounds": campgrounds,
-	})
+	if hasTemplates {
+		c.HTML(http.StatusOK, "campgrounds.html", gin.H{
+			"title":       "All Campgrounds",
+			"campgrounds": campgrounds,
+		})
+	} else {
+		getCampgrounds(c)
+	}
 }
 
 func newCampgroundPage(c *gin.Context) {
-	c.HTML(http.StatusOK, "new.html", gin.H{
-		"title": "Add New Campground",
-	})
+	if hasTemplates {
+		c.HTML(http.StatusOK, "new.html", gin.H{
+			"title": "Add New Campground",
+		})
+	} else {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "POST to /api/campgrounds to create a new campground",
+			"example": map[string]interface{}{
+				"title":       "My Campground",
+				"description": "A great place to camp",
+				"location":    "Somewhere Beautiful",
+				"price":       25.99,
+			},
+		})
+	}
 }
 
 func showCampgroundPage(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		c.HTML(http.StatusBadRequest, "error.html", gin.H{
-			"title": "Error",
-			"error": "Invalid campground ID",
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid campground ID"})
 		return
 	}
 
 	for _, campground := range campgrounds {
 		if campground.ID == id {
-			c.HTML(http.StatusOK, "show.html", gin.H{
-				"title":      campground.Title,
-				"campground": campground,
-			})
+			if hasTemplates {
+				c.HTML(http.StatusOK, "show.html", gin.H{
+					"title":      campground.Title,
+					"campground": campground,
+				})
+			} else {
+				c.JSON(http.StatusOK, gin.H{"campground": campground})
+			}
 			return
 		}
 	}
 
-	c.HTML(http.StatusNotFound, "error.html", gin.H{
-		"title": "Not Found",
-		"error": "Campground not found",
-	})
+	c.JSON(http.StatusNotFound, gin.H{"error": "Campground not found"})
 }
 
 func editCampgroundPage(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		c.HTML(http.StatusBadRequest, "error.html", gin.H{
-			"title": "Error",
-			"error": "Invalid campground ID",
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid campground ID"})
 		return
 	}
 
 	for _, campground := range campgrounds {
 		if campground.ID == id {
-			c.HTML(http.StatusOK, "edit.html", gin.H{
-				"title":      "Edit " + campground.Title,
-				"campground": campground,
-			})
+			if hasTemplates {
+				c.HTML(http.StatusOK, "edit.html", gin.H{
+					"title":      "Edit " + campground.Title,
+					"campground": campground,
+				})
+			} else {
+				c.JSON(http.StatusOK, gin.H{
+					"message":    "PUT to /api/campgrounds/" + idStr + " to update",
+					"campground": campground,
+				})
+			}
 			return
 		}
 	}
 
-	c.HTML(http.StatusNotFound, "error.html", gin.H{
-		"title": "Not Found",
-		"error": "Campground not found",
-	})
+	c.JSON(http.StatusNotFound, gin.H{"error": "Campground not found"})
 }
 
 func createCampgroundWeb(c *gin.Context) {
@@ -221,21 +244,15 @@ func createCampgroundWeb(c *gin.Context) {
 	description := c.PostForm("description")
 	location := c.PostForm("location")
 	priceStr := c.PostForm("price")
-	
+
 	price, err := strconv.ParseFloat(priceStr, 64)
 	if err != nil {
-		c.HTML(http.StatusBadRequest, "error.html", gin.H{
-			"title": "Error",
-			"error": "Invalid price format",
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid price format"})
 		return
 	}
 
 	if title == "" || description == "" || location == "" {
-		c.HTML(http.StatusBadRequest, "error.html", gin.H{
-			"title": "Error",
-			"error": "All fields are required",
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "All fields are required"})
 		return
 	}
 
@@ -258,10 +275,7 @@ func updateCampgroundWeb(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		c.HTML(http.StatusBadRequest, "error.html", gin.H{
-			"title": "Error",
-			"error": "Invalid campground ID",
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid campground ID"})
 		return
 	}
 
@@ -269,13 +283,10 @@ func updateCampgroundWeb(c *gin.Context) {
 	description := c.PostForm("description")
 	location := c.PostForm("location")
 	priceStr := c.PostForm("price")
-	
+
 	price, err := strconv.ParseFloat(priceStr, 64)
 	if err != nil {
-		c.HTML(http.StatusBadRequest, "error.html", gin.H{
-			"title": "Error",
-			"error": "Invalid price format",
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid price format"})
 		return
 	}
 
@@ -290,20 +301,14 @@ func updateCampgroundWeb(c *gin.Context) {
 		}
 	}
 
-	c.HTML(http.StatusNotFound, "error.html", gin.H{
-		"title": "Not Found",
-		"error": "Campground not found",
-	})
+	c.JSON(http.StatusNotFound, gin.H{"error": "Campground not found"})
 }
 
 func deleteCampgroundWeb(c *gin.Context) {
 	idStr := c.Param("id")
 	id, err := strconv.Atoi(idStr)
 	if err != nil {
-		c.HTML(http.StatusBadRequest, "error.html", gin.H{
-			"title": "Error",
-			"error": "Invalid campground ID",
-		})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid campground ID"})
 		return
 	}
 
@@ -315,10 +320,7 @@ func deleteCampgroundWeb(c *gin.Context) {
 		}
 	}
 
-	c.HTML(http.StatusNotFound, "error.html", gin.H{
-		"title": "Not Found",
-		"error": "Campground not found",
-	})
+	c.JSON(http.StatusNotFound, gin.H{"error": "Campground not found"})
 }
 
 // API Handlers
@@ -326,18 +328,18 @@ func apiDocs(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"api_version": "1.0.0",
 		"endpoints": map[string]interface{}{
-			"GET /api/campgrounds":     "List all campgrounds",
-			"GET /api/campgrounds/:id": "Get campground by ID",
-			"POST /api/campgrounds":    "Create new campground",
-			"PUT /api/campgrounds/:id": "Update campground",
+			"GET /api/campgrounds":        "List all campgrounds",
+			"GET /api/campgrounds/:id":    "Get campground by ID",
+			"POST /api/campgrounds":       "Create new campground",
+			"PUT /api/campgrounds/:id":    "Update campground",
 			"DELETE /api/campgrounds/:id": "Delete campground",
 		},
 		"web_interface": map[string]string{
-			"GET /":                    "Home page",
-			"GET /campgrounds":         "View all campgrounds",
-			"GET /campgrounds/new":     "Add new campground form",
-			"GET /campgrounds/:id":     "View campground details",
-			"GET /campgrounds/:id/edit": "Edit campground form",
+			"GET /":                       "Home page",
+			"GET /campgrounds":            "View all campgrounds",
+			"GET /campgrounds/new":        "Add new campground form",
+			"GET /campgrounds/:id":        "View campground details",
+			"GET /campgrounds/:id/edit":   "Edit campground form",
 		},
 	})
 }

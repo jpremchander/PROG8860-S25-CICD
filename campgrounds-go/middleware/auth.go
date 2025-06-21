@@ -9,7 +9,6 @@ import (
 	"yelpcamp-go/utils"
 )
 
-// AuthRequired middleware for API routes
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
@@ -33,7 +32,6 @@ func AuthRequired() gin.HandlerFunc {
 			return
 		}
 
-		// Extract user ID from claims
 		if userIDStr, ok := claims["user_id"].(string); ok {
 			if userID, err := primitive.ObjectIDFromHex(userIDStr); err == nil {
 				c.Set("user_id", userID)
@@ -52,7 +50,6 @@ func AuthRequired() gin.HandlerFunc {
 	}
 }
 
-// WebAuthRequired middleware for web routes
 func WebAuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token, err := c.Cookie("token")
@@ -70,7 +67,6 @@ func WebAuthRequired() gin.HandlerFunc {
 			return
 		}
 
-		// Extract user ID from claims
 		if userIDStr, ok := claims["user_id"].(string); ok {
 			if userID, err := primitive.ObjectIDFromHex(userIDStr); err == nil {
 				c.Set("user_id", userID)
@@ -92,7 +88,6 @@ func WebAuthRequired() gin.HandlerFunc {
 	}
 }
 
-// WebAuthOptional middleware for web routes that work with or without auth
 func WebAuthOptional() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token, err := c.Cookie("token")
@@ -110,7 +105,6 @@ func WebAuthOptional() gin.HandlerFunc {
 			return
 		}
 
-		// Extract user ID from claims
 		if userIDStr, ok := claims["user_id"].(string); ok {
 			if userID, err := primitive.ObjectIDFromHex(userIDStr); err == nil {
 				c.Set("user_id", userID)

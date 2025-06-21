@@ -3,6 +3,7 @@ package utils
 import (
 	"crypto/rand"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -13,12 +14,20 @@ import (
 	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
+var jwtSecret []byte
+
+func init() {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		secret = "your-super-secret-jwt-key-change-this-in-production"
+	}
+	jwtSecret = []byte(secret)
+}
+
 // EnsureJWTSecret ensures a secure JWT secret is configured
 func EnsureJWTSecret() error {
-	jwtSecret := os.Getenv("JWT_SECRET")
-	
-	// Check if JWT secret exists and is secure
-	if jwtSecret == "" || len(jwtSecret) < 32 || strings.Contains(jwtSecret, "your_super_secret") {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" || len(secret) < 32 || strings.Contains(secret, "your_super_secret") {
 		log.Printf("⚠️ JWT secret not properly configured, ensuring it's set...")
 		
 		// Generate a new secure secret
@@ -44,7 +53,7 @@ func EnsureJWTSecret() error {
 		
 		log.Printf("🔐 JWT Secret configured (%d characters) for %s environment", len(newSecret), environment)
 	} else {
-		log.Printf("✅ Using existing JWT secret (%d characters)", len(jwtSecret))
+		log.Printf("✅ Using existing JWT secret (%d characters)", len(secret))
 	}
 	
 	return nil
@@ -95,85 +104,33 @@ func saveToEnvFile(key, value string) error {
 }
 
 // GenerateJWTToken generates a JWT token for a user
-func GenerateJWTToken(userID primitive.ObjectID) (string, error) {
-	// Ensure JWT secret is configured
-	if err := EnsureJWTSecret(); err != nil {
-		return "", err
-	}
-	
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		return "", fmt.Errorf("JWT_SECRET not configured")
-	}
-
+func GenerateJWTToken(userID string) (string, error) {
 	claims := jwt.MapClaims{
-		"user_id": userID.Hex(),
-		"exp":     time.Now().Add(time.Hour * 24 * 7).Unix(), // 7 days
+		"user_id": userID,
+		"exp":     time.Now().Add(time.Hour * 24).Unix(),
 		"iat":     time.Now().Unix(),
-		"iss":     "yelpcamp-go",
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	signedToken, err := token.SignedString([]byte(jwtSecret))
-	
-	if err != nil {
-		log.Printf("❌ Error signing JWT token: %v", err)
-		return "", err
-	}
-	
-	log.Printf("✅ JWT token generated successfully for user: %s", userID.Hex())
-	return signedToken, nil
+	return token.SignedString(jwtSecret)
 }
 
 // ValidateJWTToken validates a JWT token and returns the user ID
-func ValidateJWTToken(tokenString string) (string, error) {
-	// Ensure JWT secret is configured
-	if err := EnsureJWTSecret(); err != nil {
-		return "", err
-	}
-	
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		return "", fmt.Errorf("JWT_SECRET not configured")
-	}
-
+func ValidateJWTToken(tokenString string) (jwt.MapClaims, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
-		// Validate the signing method
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+			return nil, errors.New("invalid signing method")
 		}
-		return []byte(jwtSecret), nil
+		return jwtSecret, nil
 	})
 
 	if err != nil {
-		log.Printf("❌ JWT token parsing error: %v", err)
-		return "", err
+		return nil, err
 	}
 
-	if !token.Valid {
-		log.Printf("❌ JWT token is invalid")
-		return "", fmt.Errorf("invalid token")
+	if claims, ok := token.Claims.(jwt.MapClaims); ok && token.Valid {
+		return claims, nil
 	}
 
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		log.Printf("❌ JWT token claims are invalid")
-		return "", fmt.Errorf("invalid token claims")
-	}
-
-	// Validate expiration
-	if exp, ok := claims["exp"].(float64); ok {
-		if time.Now().Unix() > int64(exp) {
-			log.Printf("❌ JWT token has expired")
-			return "", fmt.Errorf("token has expired")
-		}
-	}
-
-	// Extract user ID
-	if userID, ok := claims["user_id"].(string); ok {
-		log.Printf("✅ JWT token validated successfully for user: %s", userID)
-		return userID, nil
-	}
-
-	return "", fmt.Errorf("user_id not found in token claims")
+	return nil, errors.New("invalid token")
 }

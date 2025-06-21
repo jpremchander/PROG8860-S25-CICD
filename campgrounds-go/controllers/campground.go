@@ -59,17 +59,7 @@ func (cc *CampgroundController) Create(c *gin.Context) {
 		return
 	}
 
-	userIDStr, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
-		return
-	}
-
-	userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
-		return
-	}
+	userID := c.MustGet("user_id").(primitive.ObjectID)
 
 	campground := models.Campground{
 		Title:       input.Title,
@@ -108,17 +98,7 @@ func (cc *CampgroundController) Update(c *gin.Context) {
 		return
 	}
 
-	userIDStr, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
-		return
-	}
-
-	userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
-		return
-	}
+	userID := c.MustGet("user_id").(primitive.ObjectID)
 
 	db := config.GetDB()
 	campground, err := models.FindCampgroundByID(db, id)
@@ -160,17 +140,7 @@ func (cc *CampgroundController) Delete(c *gin.Context) {
 		return
 	}
 
-	userIDStr, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
-		return
-	}
-
-	userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
-		return
-	}
+	userID := c.MustGet("user_id").(primitive.ObjectID)
 
 	db := config.GetDB()
 	campground, err := models.FindCampgroundByID(db, id)
@@ -204,17 +174,7 @@ func (cc *CampgroundController) UploadImages(c *gin.Context) {
 		return
 	}
 
-	userIDStr, exists := c.Get("user_id")
-	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not authenticated"})
-		return
-	}
-
-	userID, err := primitive.ObjectIDFromHex(userIDStr.(string))
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid user ID"})
-		return
-	}
+	userID := c.MustGet("user_id").(primitive.ObjectID)
 
 	db := config.GetDB()
 	campground, err := models.FindCampgroundByID(db, id)
@@ -241,10 +201,10 @@ func (cc *CampgroundController) UploadImages(c *gin.Context) {
 		return
 	}
 
-	// Upload images to Cloudinary
-	cloudinaryService, err := utils.NewCloudinaryService()
+	// Upload images to S3
+	s3Service, err := utils.NewS3Service()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not initialize image service"})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Could not initialize S3 service"})
 		return
 	}
 
@@ -256,7 +216,7 @@ func (cc *CampgroundController) UploadImages(c *gin.Context) {
 		}
 		defer src.Close()
 
-		result, err := cloudinaryService.UploadImage(src, "yelpcamp")
+		result, err := s3Service.UploadImage(src, file.Filename, userID.Hex())
 		if err != nil {
 			continue
 		}
@@ -264,7 +224,7 @@ func (cc *CampgroundController) UploadImages(c *gin.Context) {
 		image := models.Image{
 			URL:      result.SecureURL,
 			Filename: file.Filename,
-			PublicID: result.PublicID,
+			Key:      result.PublicID,
 		}
 		uploadedImages = append(uploadedImages, image)
 	}
@@ -287,8 +247,7 @@ func (cc *CampgroundController) UploadImages(c *gin.Context) {
 	})
 }
 
-// Add these methods to the existing CampgroundController
-
+// Web methods for form handling
 func (cc *CampgroundController) CreateWeb(c *gin.Context) {
 	title := c.PostForm("title")
 	description := c.PostForm("description")

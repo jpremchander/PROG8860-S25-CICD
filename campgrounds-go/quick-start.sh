@@ -1,87 +1,73 @@
 #!/bin/bash
 
-echo "🚀 YelpCamp Quick Start Script"
+echo "🧹 Clean Build for YelpCamp Go"
 echo "=============================="
 
-# Navigate to project directory
-if [ -d "campgrounds-go" ]; then
-    cd campgrounds-go
-    echo "✅ Navigated to campgrounds-go directory"
-else
-    echo "❌ campgrounds-go directory not found!"
-    echo "Current directory contents:"
-    ls -la
-    exit 1
+# Load environment variables
+if [ -f ".env" ]; then
+    export $(cat .env | grep -v '^#' | xargs)
 fi
 
-# Check if .env exists
-if [ ! -f ".env" ]; then
-    echo "📝 Creating .env file..."
-    cat > .env << 'EOF'
-# Environment Configuration
-GIN_MODE=debug
+# Stop and remove containers
+echo "🛑 Stopping containers..."
+docker stop yelpcamp-mongo 2>/dev/null || true
+docker rm yelpcamp-mongo 2>/dev/null || true
 
-# MongoDB Configuration
-MONGO_HOST=mongo
-MONGO_PORT=27017
-MONGO_USER=yelpcamp_dev
-MONGO_PASSWORD=dev_password_123
-MONGO_DATABASE=yelpcamp_dev
+# Clean Go artifacts
+echo "🧹 Cleaning Go artifacts..."
+rm -f yelpcamp-app
+rm -f go.sum
+go clean -modcache
 
-# JWT Secret
-JWT_SECRET=your_super_secret_jwt_key_here
+# Remove any Cloudinary references from go.mod
+echo "📝 Cleaning go.mod..."
+rm -f go.mod go.sum
 
-# Cloudinary Configuration
-CLOUDINARY_CLOUD_NAME=dl0zvwr9i
-CLOUDINARY_API_KEY=719144713242759
-CLOUDINARY_API_SECRET=tCIGtTFz8vvEem2Vl1HuOd_7xhE
+# Initialize fresh Go module
+go mod init yelpcamp-go
 
-# Server Configuration
-PORT=3000
+# Add only required dependencies
+echo "📦 Adding dependencies..."
+go get github.com/gin-gonic/gin@v1.9.1
+go get github.com/joho/godotenv@v1.5.1
+go get go.mongodb.org/mongo-driver@v1.13.1
+go get golang.org/x/crypto@v0.17.0
+go get github.com/golang-jwt/jwt/v4@v4.5.0
+go get github.com/aws/aws-sdk-go@v1.55.7
 
-# AWS Configuration
-AWS_REGION=us-east-1
-S3_BUCKET=yelpcamp-artifacts-bucket
-IAM_ROLE=arn:aws:iam::054037100649:role/yelpcamp-s3-role
-EOF
-    echo "✅ .env file created"
-fi
-
-# Clean up any existing containers
-echo "🧹 Cleaning up existing containers..."
-docker-compose -f docker-compose.dev.yml down 2>/dev/null || echo "No containers to stop"
-
-# Download dependencies
-echo "📦 Downloading Go dependencies..."
+# Tidy modules
 go mod tidy
 
-# Start with Docker Compose
-echo "🐳 Starting with Docker Compose..."
-docker-compose -f docker-compose.dev.yml up --build -d
+# Start MongoDB
+echo "🗄️  Starting MongoDB..."
+docker run -d --name yelpcamp-mongo \
+    -p 27017:27017 \
+    -e MONGO_INITDB_ROOT_USERNAME=yelpcamp_dev \
+    -e MONGO_INITDB_ROOT_PASSWORD=dev_password_123 \
+    -e MONGO_INITDB_DATABASE=yelpcamp_dev \
+    mongo:7.0
 
-# Wait for services to start
-echo "⏳ Waiting for services to start..."
-sleep 30
+# Wait for MongoDB
+echo "⏳ Waiting for MongoDB..."
+sleep 15
 
-# Check if services are running
-echo "🔍 Checking service status..."
-docker-compose -f docker-compose.dev.yml ps
+# Update .env for localhost
+sed -i 's/MONGO_HOST=mongo/MONGO_HOST=localhost/' .env
 
-# Test endpoints
-echo "🧪 Testing endpoints..."
-echo "Testing health endpoint:"
-curl -s http://localhost:3000/api/health | jq . 2>/dev/null || curl -s http://localhost:3000/api/health
+# Build
+echo "🏗️  Building..."
+go build -o yelpcamp-app .
 
-echo ""
-echo "Testing root endpoint:"
-curl -s -I http://localhost:3000/ | head -1
-
-echo ""
-echo "🎉 Setup complete!"
-echo "📱 Access the application:"
-echo "  - Web Interface: http://localhost:3000"
-echo "  - API Health: http://localhost:3000/api/health"
-echo "  - Mongo Express: http://localhost:8081 (admin/admin123)"
-echo ""
-echo "📋 To view logs: docker-compose -f docker-compose.dev.yml logs -f"
-echo "🛑 To stop: docker-compose -f docker-compose.dev.yml down"
+if [ -f "./yelpcamp-app" ]; then
+    echo "✅ Build successful!"
+    echo ""
+    echo "🚀 Starting YelpCamp..."
+    echo "📱 Web: http://localhost:3000"
+    echo "📡 API: http://localhost:3000/api/health"
+    echo "☁️  S3: ${S3_BUCKET}"
+    echo ""
+    ./yelpcamp-app
+else
+    echo "❌ Build failed!"
+    go mod verify
+fi

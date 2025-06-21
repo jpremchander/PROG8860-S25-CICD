@@ -7,7 +7,6 @@ import (
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
-	"go.mongodb.org/mongo-driver/mongo/options"
 )
 
 type Campground struct {
@@ -34,7 +33,7 @@ type CampgroundInput struct {
 type Image struct {
 	URL      string `json:"url" bson:"url"`
 	Filename string `json:"filename" bson:"filename"`
-	PublicID string `json:"public_id" bson:"public_id"`
+	Key      string `json:"key" bson:"key"` // S3 key instead of Cloudinary public_id
 }
 
 func (c *Campground) Create(db *mongo.Database) error {

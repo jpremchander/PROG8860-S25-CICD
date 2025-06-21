@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"os"
 	"path/filepath"
 	"time"
@@ -33,41 +32,38 @@ func NewS3Service() (*S3Service, error) {
 	}, nil
 }
 
-func (s *S3Service) UploadUserImage(file *multipart.FileHeader, userID string) (string, error) {
-	src, err := file.Open()
-	if err != nil {
-		return "", err
-	}
-	defer src.Close()
-
+func (s *S3Service) UploadImage(file io.Reader, filename string, userID string) (*UploadResult, error) {
 	// Read file content
 	buffer := bytes.NewBuffer(nil)
-	if _, err := io.Copy(buffer, src); err != nil {
-		return "", err
+	if _, err := io.Copy(buffer, file); err != nil {
+		return nil, err
 	}
 
 	// Generate unique filename
 	timestamp := time.Now().Unix()
-	ext := filepath.Ext(file.Filename)
-	key := fmt.Sprintf("user-uploads/%s/%d%s", userID, timestamp, ext)
+	ext := filepath.Ext(filename)
+	key := fmt.Sprintf("campgrounds/%s/%d%s", userID, timestamp, ext)
 
 	// Upload to S3
-	_, err = s.client.PutObject(&s3.PutObjectInput{
+	_, err := s.client.PutObject(&s3.PutObjectInput{
 		Bucket:      aws.String(s.bucket),
 		Key:         aws.String(key),
 		Body:        bytes.NewReader(buffer.Bytes()),
-		ContentType: aws.String(file.Header.Get("Content-Type")),
+		ContentType: aws.String("image/jpeg"), // Default content type
 		ACL:         aws.String("public-read"),
 	})
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
 	// Return public URL
 	url := fmt.Sprintf("https://%s.s3.%s.amazonaws.com/%s", 
 		s.bucket, os.Getenv("AWS_REGION"), key)
-	
-	return url, nil
+
+	return &UploadResult{
+		SecureURL: url,
+		PublicID:  key,
+	}, nil
 }
 
 func (s *S3Service) DeleteImage(key string) error {
@@ -76,4 +72,10 @@ func (s *S3Service) DeleteImage(key string) error {
 		Key:    aws.String(key),
 	})
 	return err
+}
+
+// UploadResult mimics Cloudinary's response structure
+type UploadResult struct {
+	SecureURL string `json:"secure_url"`
+	PublicID  string `json:"public_id"`
 }

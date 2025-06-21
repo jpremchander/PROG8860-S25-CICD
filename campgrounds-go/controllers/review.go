@@ -6,7 +6,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"go.mongodb.org/mongo-driver/bson/primitive"
-	"go.mongodb.org/mongo-driver/mongo"
 	"yelpcamp-go/config"
 	"yelpcamp-go/models"
 )
@@ -159,15 +158,8 @@ func (rc *ReviewController) Delete(c *gin.Context) {
 }
 
 func (rc *ReviewController) DeleteWeb(c *gin.Context) {
-	campgroundIDParam := c.Param("id")
 	reviewIDParam := c.Param("reviewId")
 	
-	campgroundID, err := primitive.ObjectIDFromHex(campgroundIDParam)
-	if err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid campground ID"})
-		return
-	}
-
 	reviewID, err := primitive.ObjectIDFromHex(reviewIDParam)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid review ID"})

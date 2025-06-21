@@ -2,13 +2,13 @@ package main
 
 import (
 	"log"
-	"net/http"
 	"os"
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"yelpcamp-go/config"
 	"yelpcamp-go/middleware"
+	"yelpcamp-go/models"
 	"yelpcamp-go/routes"
 )
 
@@ -21,6 +21,14 @@ func main() {
 	// Connect to MongoDB
 	config.ConnectMongoDB()
 	defer config.DisconnectMongoDB()
+
+	// Create indexes
+	models.AutoMigrate()
+
+	// Seed sample data in development mode
+	if os.Getenv("GIN_MODE") != "release" {
+		models.SeedData()
+	}
 
 	// Initialize Gin router
 	r := gin.Default()

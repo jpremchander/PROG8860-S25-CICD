@@ -74,12 +74,43 @@
                                 <div>
                                     <div class="d-flex align-items-center mb-2">
                                         <div class="me-2">
-                                            {{$rating := .Rating}}
-                                            {{range $i := iterate $rating}}
-                                            <i class="fas fa-star text-warning"></i>
-                                            {{end}}
-                                            {{range $i := iterate (subtract 5 $rating)}}
-                                            <i class="far fa-star text-warning"></i>
+                                            <!-- Star rating display -->
+                                            {{if eq .Rating 1}}
+                                                <i class="fas fa-star text-warning"></i>
+                                                <i class="far fa-star text-warning"></i>
+                                                <i class="far fa-star text-warning"></i>
+                                                <i class="far fa-star text-warning"></i>
+                                                <i class="far fa-star text-warning"></i>
+                                            {{else if eq .Rating 2}}
+                                                <i class="fas fa-star text-warning"></i>
+                                                <i class="fas fa-star text-warning"></i>
+                                                <i class="far fa-star text-warning"></i>
+                                                <i class="far fa-star text-warning"></i>
+                                                <i class="far fa-star text-warning"></i>
+                                            {{else if eq .Rating 3}}
+                                                <i class="fas fa-star text-warning"></i>
+                                                <i class="fas fa-star text-warning"></i>
+                                                <i class="fas fa-star text-warning"></i>
+                                                <i class="far fa-star text-warning"></i>
+                                                <i class="far fa-star text-warning"></i>
+                                            {{else if eq .Rating 4}}
+                                                <i class="fas fa-star text-warning"></i>
+                                                <i class="fas fa-star text-warning"></i>
+                                                <i class="fas fa-star text-warning"></i>
+                                                <i class="fas fa-star text-warning"></i>
+                                                <i class="far fa-star text-warning"></i>
+                                            {{else if eq .Rating 5}}
+                                                <i class="fas fa-star text-warning"></i>
+                                                <i class="fas fa-star text-warning"></i>
+                                                <i class="fas fa-star text-warning"></i>
+                                                <i class="fas fa-star text-warning"></i>
+                                                <i class="fas fa-star text-warning"></i>
+                                            {{else}}
+                                                <i class="far fa-star text-warning"></i>
+                                                <i class="far fa-star text-warning"></i>
+                                                <i class="far fa-star text-warning"></i>
+                                                <i class="far fa-star text-warning"></i>
+                                                <i class="far fa-star text-warning"></i>
                                             {{end}}
                                         </div>
                                         {{if .Author}}
@@ -192,15 +223,6 @@
                     alert('Error deleting review');
                 });
             }
-        }
-
-        // Template helper functions for Go templates
-        function iterate(count) {
-            return Array.from({length: count}, (_, i) => i);
-        }
-
-        function subtract(a, b) {
-            return a - b;
         }
     </script>
 </body>

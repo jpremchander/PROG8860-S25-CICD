@@ -120,40 +120,25 @@ pipeline {
                     # Navigate to the Go project directory
                     cd campgrounds-go
                     
-                    # Clean any existing modules and cache
-                    rm -f go.sum
-                    go clean -modcache || true
-                    
-                    echo "Downloading Go dependencies..."
-                    
-                    # SOLUTION 1: Try with go mod download first
-                    for i in 1 2 3; do
-                        echo "Attempt $i: Downloading dependencies with go mod download..."
+                    # SOLUTION 1: Try with existing go.sum first
+                    if [ -f go.sum ]; then
+                        echo "✅ Using existing go.sum file..."
                         if go mod download; then
-                            echo "✅ Dependencies downloaded successfully on attempt $i"
-                            break
+                            echo "✅ Dependencies downloaded successfully with existing go.sum"
                         else
-                            echo "❌ Attempt $i failed"
-                            if [ $i -eq 3 ]; then
-                                echo "Trying alternative approach with go mod tidy..."
-                                
-                                # SOLUTION 2: Use go mod tidy with specific settings
-                                export GOPROXY=https://proxy.golang.org
-                                export GOSUMDB=off
-                                
-                                if go mod tidy; then
-                                    echo "✅ go mod tidy succeeded"
-                                    break
-                                else
-                                    echo "Trying vendor approach..."
-                                    # SOLUTION 3: Create vendor directory
-                                    go mod vendor || echo "Vendor creation failed, but continuing..."
-                                    break
-                                fi
-                            fi
-                            sleep 2
+                            echo "⚠️ Failed with existing go.sum, trying alternative approach..."
+                            # Clear module cache and try again
+                            go clean -modcache
+                            export GOPROXY=https://proxy.golang.org
+                            export GOSUMDB=off
+                            go mod tidy
                         fi
-                    done
+                    else
+                        echo "📝 No go.sum found, creating one..."
+                        export GOPROXY=https://proxy.golang.org
+                        export GOSUMDB=off
+                        go mod tidy
+                    fi
                     
                     # Verify modules (allow failure)
                     go mod verify || echo "⚠️ Module verification failed, but continuing..."

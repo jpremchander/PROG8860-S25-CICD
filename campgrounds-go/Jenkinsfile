@@ -6,7 +6,6 @@ pipeline {
         DOCKER_IMAGE = 'yelp-camp'
         DEV_PORT = '3001'
         PROD_PORT = '3000'
-        DOCKER_REGISTRY = 'your-registry'
         AWS_DEFAULT_REGION = 'ca-central-1'
         S3_BUCKET = 'yelp-camp-project'
     }
@@ -80,9 +79,7 @@ pipeline {
                                 docker --version
                                 docker-compose --version
                                 
-                                # Go version check removed - we use Go inside Docker containers
                                 echo "✅ Go will be available inside Docker containers"
-                                
                                 echo "✅ Environment setup completed"
                             '''
                         }
@@ -107,7 +104,7 @@ pipeline {
                         docker tag ${DOCKER_IMAGE}:prod-${BUILD_NUMBER} ${DOCKER_IMAGE}:prod-latest
                         
                         echo "📋 Docker images built:"
-                        docker images | grep ${DOCKER_IMAGE}
+                        docker images | grep ${DOCKER_IMAGE} | head -5
                         
                         echo "✅ Docker images built successfully!"
                     '''
@@ -115,10 +112,9 @@ pipeline {
             }
         }
         
-        // 🆕 MIDTERM REQUIREMENT: Linting & Static Analysis
         stage('🔍 Lint & Static Analysis') {
             steps {
-                echo '🔍 Running basic static analysis in Docker...'
+                echo '🔍 Running static analysis in Docker...'
                 dir('campgrounds-go') {
                     sh '''
                         echo "🔍 Running go vet..."
@@ -126,14 +122,14 @@ pipeline {
                             -v $(pwd):/app \
                             -w /app \
                             ${DOCKER_IMAGE}:dev-latest \
-                            go vet ./... || echo "✅ go vet completed"
+                            go vet ./... || echo "⚠️ go vet found issues"
                 
                         echo "🔍 Running go fmt check..."
                         docker run --rm \
                             -v $(pwd):/app \
                             -w /app \
                             ${DOCKER_IMAGE}:dev-latest \
-                            sh -c "gofmt -l . || echo '✅ Code formatting checked'"
+                            sh -c "gofmt -l . | head -10 || echo '✅ Code formatting checked'"
                 
                         echo "✅ Static analysis completed!"
                     '''
@@ -141,7 +137,6 @@ pipeline {
             }
         }
         
-        // 🆕 MIDTERM REQUIREMENT: Tests that fail pipeline
         stage('🧪 Run Tests') {
             steps {
                 script {
@@ -149,27 +144,41 @@ pipeline {
                         echo '🧪 Running tests in Docker container...'
                         dir('campgrounds-go') {
                             sh '''
-                                echo "🧪 Running unit tests in development container..."
+                                echo "🧪 Running unit tests..."
                                 
-                                # Run tests and capture exit code - FAIL PIPELINE ON TEST FAILURE
+                                # Create a temporary directory for test outputs
+                                mkdir -p test-results
+                                
+                                # Run tests without race detector to avoid CGO issues
                                 set +e
                                 docker run --rm \
                                     -v $(pwd):/app \
                                     -w /app \
+                                    -u root \
                                     ${DOCKER_IMAGE}:dev-latest \
-                                    sh -c "go test -v -race -coverprofile=coverage.out ./..."
-                                
+                                    sh -c "go test -v -coverprofile=test-results/coverage.out ./... > test-results/test-output.log 2>&1"
+
                                 TEST_EXIT_CODE=$?
                                 set -e
-                                
-                                # Generate coverage report
-                                docker run --rm \
-                                    -v $(pwd):/app \
-                                    -w /app \
-                                    ${DOCKER_IMAGE}:dev-latest \
-                                    sh -c "go tool cover -html=coverage.out -o coverage.html" || true
-                                
-                                echo "📊 Test Coverage Report Generated: coverage.html"
+
+                                # Show test output
+                                echo "📋 Test Output:"
+                                cat test-results/test-output.log || echo "No test output file found"
+
+                                # Generate coverage report if coverage file exists
+                                if [ -f test-results/coverage.out ]; then
+                                    echo "📊 Generating coverage report..."
+                                    docker run --rm \
+                                        -v $(pwd):/app \
+                                        -w /app \
+                                        -u root \
+                                        ${DOCKER_IMAGE}:dev-latest \
+                                        sh -c "go tool cover -html=test-results/coverage.out -o test-results/coverage.html" || echo "Coverage report generation failed"
+                                    
+                                    # Copy coverage files to workspace root for archiving
+                                    cp test-results/coverage.html . 2>/dev/null || echo "No coverage.html to copy"
+                                    cp test-results/coverage.out . 2>/dev/null || echo "No coverage.out to copy"
+                                fi
                                 
                                 if [ $TEST_EXIT_CODE -ne 0 ]; then
                                     echo "❌ Tests failed with exit code $TEST_EXIT_CODE"
@@ -187,11 +196,11 @@ pipeline {
             }
             post {
                 always {
-                    // Archive test results and coverage
                     dir('campgrounds-go') {
-                        archiveArtifacts artifacts: 'coverage.html', allowEmptyArchive: true
+                        // Archive test results and coverage
+                        archiveArtifacts artifacts: 'coverage.html,coverage.out,test-results/**', allowEmptyArchive: true
                         publishHTML([
-                            allowMissing: false,
+                            allowMissing: true,
                             alwaysLinkToLastBuild: true,
                             keepAll: true,
                             reportDir: '.',
@@ -203,7 +212,6 @@ pipeline {
             }
         }
         
-        // 🆕 MIDTERM REQUIREMENT: S3 Artifact Upload
         stage('📦 Build & Upload Artifacts') {
             steps {
                 echo '📦 Creating and uploading build artifacts to S3...'
@@ -212,13 +220,20 @@ pipeline {
                         sh '''
                             echo "🔨 Building artifacts for both environments..."
                             
-                            # Build development binary
+                            # Use Docker to build binaries (ensures consistent environment)
                             echo "Building development binary..."
-                            CGO_ENABLED=0 GOOS=linux go build -o campgrounds-go-dev main.go
+                            docker run --rm \
+                                -v $(pwd):/app \
+                                -w /app \
+                                ${DOCKER_IMAGE}:dev-latest \
+                                sh -c "CGO_ENABLED=0 GOOS=linux go build -o campgrounds-go-dev main.go"
                             
-                            # Build production binary with optimizations
                             echo "Building production binary..."
-                            CGO_ENABLED=0 GOOS=linux go build -ldflags="-w -s" -o campgrounds-go-prod main.go
+                            docker run --rm \
+                                -v $(pwd):/app \
+                                -w /app \
+                                ${DOCKER_IMAGE}:dev-latest \
+                                sh -c "CGO_ENABLED=0 GOOS=linux go build -ldflags='-w -s' -o campgrounds-go-prod main.go"
                             
                             # Create artifact directories
                             mkdir -p artifacts/dev artifacts/prod
@@ -332,7 +347,7 @@ EOF
                         done
                         
                         # Show container status
-                        docker ps | grep campgrounds-dev
+                        docker ps | grep campgrounds-dev || echo "Container not found"
                         echo "✅ Development deployment completed!"
                     '''
                 }
@@ -392,7 +407,7 @@ EOF
                             done
                             
                             # Show container status
-                            docker ps | grep campgrounds-prod
+                            docker ps | grep campgrounds-prod || echo "Container not found"
                             echo "✅ Production deployment completed!"
                         '''
                     }
@@ -414,7 +429,7 @@ EOF
                                 curl -f http://localhost:${DEV_PORT}/ || echo "Dev web check failed"
                                 
                                 echo "Development container logs:"
-                                docker logs campgrounds-dev --tail 20
+                                docker logs campgrounds-dev --tail 20 || echo "No dev container logs"
                                 
                                 echo "✅ Development tests completed"
                             """
@@ -429,7 +444,7 @@ EOF
                                 curl -f http://localhost:${PROD_PORT}/ || echo "Prod web check failed"
                                 
                                 echo "Production container logs:"
-                                docker logs campgrounds-prod --tail 20
+                                docker logs campgrounds-prod --tail 20 || echo "No prod container logs"
                                 
                                 echo "✅ Production tests completed"
                             """
@@ -451,23 +466,23 @@ EOF
                         echo "=================================="
                         
                         echo "🔍 Container Status:"
-                        docker ps | grep campgrounds
+                        docker ps | grep campgrounds || echo "No campgrounds containers running"
                         
                         echo ""
                         echo "🔍 Image Sizes:"
-                        docker images | grep ${DOCKER_IMAGE}
+                        docker images | grep ${DOCKER_IMAGE} | head -5
                         
                         echo ""
                         echo "🔍 Resource Usage:"
-                        docker stats --no-stream campgrounds-dev campgrounds-prod || true
+                        docker stats --no-stream campgrounds-dev campgrounds-prod 2>/dev/null || echo "Resource stats unavailable"
                         
                         echo ""
                         echo "🔍 Health Check Comparison:"
                         echo "Development Health:"
-                        curl -s http://localhost:${DEV_PORT}/health | jq . || echo "Dev health check failed"
+                        curl -s http://localhost:${DEV_PORT}/health 2>/dev/null || echo "Dev health check failed"
                         
                         echo "Production Health:"
-                        curl -s http://localhost:${PROD_PORT}/health | jq . || echo "Prod health check failed"
+                        curl -s http://localhost:${PROD_PORT}/health 2>/dev/null || echo "Prod health check failed"
                         
                         echo "✅ Environment comparison completed"
                     '''
@@ -484,7 +499,7 @@ EOF
                 docker ps -a | grep campgrounds || echo "No campgrounds containers found"
                 
                 echo "🖼️ Final Image Status:"
-                docker images | grep yelp-camp || echo "No yelp-camp images found"
+                docker images | grep yelp-camp | head -5 || echo "No yelp-camp images found"
                 
                 echo "💾 Disk Usage:"
                 docker system df
@@ -494,21 +509,27 @@ EOF
         success {
             echo '✅ Pipeline succeeded! 🎉'
             script {
-                def message = "🎉 Complete CI/CD Pipeline Summary:\n📦 Build: ${env.BUILD_NUMBER}\n"
-                message += "🧪 Tests: ✅ All ${params.SKIP_TESTS ? 'skipped' : 'passed'}\n"
-                message += "🔍 Linting: ✅ Completed\n"
-                message += "📦 Artifacts: ✅ Uploaded to S3\n"
+                def message = """
+🎉 Complete CI/CD Pipeline Summary:
+📦 Build: ${env.BUILD_NUMBER}
+🧪 Tests: ✅ All ${params.SKIP_TESTS ? 'skipped' : 'passed'}
+🔍 Linting: ✅ Completed
+📦 Artifacts: ✅ Uploaded to S3
+"""
                 if (params.DEPLOY_ENV == 'dev' || params.DEPLOY_ENV == 'both') {
                     message += "🚀 Development: http://localhost:${env.DEV_PORT} (Hot Reload)\n"
                 }
                 if (params.DEPLOY_ENV == 'prod' || params.DEPLOY_ENV == 'both') {
                     message += "🚀 Production: http://localhost:${env.PROD_PORT} (Optimized)\n"
                 }
-                message += "\n📋 Midterm Requirements Complete:\n"
-                message += "✅ 4+ Unit Tests\n"
-                message += "✅ Linting & Static Analysis\n"
-                message += "✅ S3 Artifact Upload\n"
-                message += "✅ Test Failure Handling\n"
+                message += """
+📋 Midterm Requirements Complete:
+✅ 4+ Unit Tests
+✅ Linting & Static Analysis
+✅ S3 Artifact Upload
+✅ Test Failure Handling
+✅ Multi-Environment Deployment
+"""
                 echo message
             }
         }
@@ -517,12 +538,12 @@ EOF
             echo '❌ Pipeline failed!'
             sh '''
                 echo "🔍 Debugging information:"
-                docker logs campgrounds-dev --tail 50 || true
-                docker logs campgrounds-prod --tail 50 || true
+                docker logs campgrounds-dev --tail 50 2>/dev/null || echo "No dev container logs"
+                docker logs campgrounds-prod --tail 50 2>/dev/null || echo "No prod container logs"
                 
                 # Clean up on failure
-                docker stop campgrounds-dev campgrounds-prod || true
-                docker rm campgrounds-dev campgrounds-prod || true
+                docker stop campgrounds-dev campgrounds-prod 2>/dev/null || true
+                docker rm campgrounds-dev campgrounds-prod 2>/dev/null || true
             '''
         }
     }

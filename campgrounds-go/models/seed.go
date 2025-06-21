@@ -9,23 +9,41 @@ import (
 	"yelpcamp-go/config"
 )
 
+// ForceSeedData clears existing data and creates fresh sample data
+func ForceSeedData() {
+	db := config.GetDB()
+	if db == nil {
+		log.Println("❌ Database connection is nil, cannot force seed")
+		return
+	}
+	
+	log.Println("🧹 Force seeding: Clearing existing data...")
+	
+	// Clear existing data
+	ctx := context.Background()
+	_, err1 := db.Collection("reviews").DeleteMany(ctx, map[string]interface{}{})
+	_, err2 := db.Collection("campgrounds").DeleteMany(ctx, map[string]interface{}{})
+	_, err3 := db.Collection("users").DeleteMany(ctx, map[string]interface{}{})
+	
+	if err1 != nil || err2 != nil || err3 != nil {
+		log.Printf("⚠️ Some errors during cleanup: reviews=%v, campgrounds=%v, users=%v", err1, err2, err3)
+	}
+	
+	log.Println("✅ Cleared existing data")
+	
+	// Seed fresh data
+	SeedData()
+}
+
 // SeedData creates sample users, campgrounds, and reviews for development
 func SeedData() {
 	db := config.GetDB()
-	
-	// Check if data already exists
-	count, err := db.Collection("campgrounds").CountDocuments(context.Background(), map[string]interface{}{})
-	if err != nil {
-		log.Printf("Error checking existing data: %v", err)
+	if db == nil {
+		log.Println("❌ Database connection is nil, cannot seed data")
 		return
 	}
-	
-	if count > 0 {
-		log.Printf("Sample data already exists (%d campgrounds), skipping seed", count)
-		return
-	}
-	
-	log.Println("🌱 Seeding sample data...")
+
+	log.Println("🌱 Starting sample data seeding...")
 	
 	// Create sample users with proper password hashing
 	users := []User{
@@ -53,13 +71,15 @@ func SeedData() {
 	
 	// Insert users
 	var userIDs []primitive.ObjectID
+	log.Println("👥 Creating sample users...")
 	for i := range users {
+		log.Printf("Creating user: %s", users[i].Username)
 		if err := users[i].Create(db); err != nil {
-			log.Printf("Error creating user %s: %v", users[i].Username, err)
+			log.Printf("❌ Error creating user %s: %v", users[i].Username, err)
 			continue
 		}
 		userIDs = append(userIDs, users[i].ID)
-		log.Printf("✅ Created user: %s", users[i].Username)
+		log.Printf("✅ Created user: %s (ID: %s)", users[i].Username, users[i].ID.Hex())
 	}
 	
 	if len(userIDs) == 0 {
@@ -67,219 +87,198 @@ func SeedData() {
 		return
 	}
 	
+	log.Printf("✅ Successfully created %d users", len(userIDs))
+	
 	// Create sample campgrounds with realistic data
 	campgrounds := []Campground{
 		{
-			Title:       "Redwood, Flats",
-			Description: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Esse ipsum incidunt repellendus corporis corrupti harum eum cum recusandae, eveniet distinctio a, saepe voluptatibus! Repudiandae, eosi Ea aliquid iure nihil id?",
-			Location:    "Walnut Creek, California",
-			Price:       14.00,
-			AuthorID:    userIDs[0], // igoswamik
-			Images: []Image{
-				{
-					URL:      "https://images.unsplash.com/photo-1504851149312-7a075b496cc7?w=800&h=600&fit=crop",
-					Filename: "redwood-flats-1.jpg",
-					Key:      "yelpcamp/redwood-flats-1",
-				},
-			},
-		},
-		{
-			Title:       "Cascade, Cliffs",
-			Description: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Esse ipsum incidunt repellendus corporis corrupti harum eum cum recusandae, eveniet distinctio a, saepe voluptatibus! Repudiandae, eosi Ea aliquid iure nihil id?",
-			Location:    "Roswell, New Mexico",
-			Price:       22.50,
-			AuthorID:    userIDs[1], // hannah
-			Images: []Image{
-				{
-					URL:      "https://images.unsplash.com/photo-1445308394109-4ec2920981b1?w=800&h=600&fit=crop",
-					Filename: "cascade-cliffs-1.jpg",
-					Key:      "yelpcamp/cascade-cliffs-1",
-				},
-			},
-		},
-		{
-			Title:       "Petrified, Creekside",
-			Description: "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Esse ipsum incidunt repellendus corporis corrupti harum eum cum recusandae, eveniet distinctio a, saepe voluptatibus! Repudiandae, eosi Ea aliquid iure nihil id?",
-			Location:    "Pensacola, Florida",
-			Price:       18.75,
-			AuthorID:    userIDs[2], // bob
-			Images: []Image{
-				{
-					URL:      "https://images.unsplash.com/photo-1487730116645-74489c95b41b?w=800&h=600&fit=crop",
-					Filename: "petrified-creekside-1.jpg",
-					Key:      "yelpcamp/petrified-creekside-1",
-				},
-			},
-		},
-		{
-			Title:       "Mountain View Retreat",
-			Description: "Experience breathtaking mountain views and pristine wilderness at this secluded campground. Perfect for hiking enthusiasts and nature photographers. Features include fire pits, picnic tables, and access to hiking trails.",
-			Location:    "Aspen, Colorado",
-			Price:       35.00,
-			AuthorID:    userIDs[3], // alice
-			Images: []Image{
-				{
-					URL:      "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=800&h=600&fit=crop",
-					Filename: "mountain-view-1.jpg",
-					Key:      "yelpcamp/mountain-view-1",
-				},
-			},
-		},
-		{
-			Title:       "Lakeside Paradise",
-			Description: "Wake up to stunning lake views and enjoy swimming, fishing, and kayaking. This family-friendly campground offers clean restrooms, showers, and a camp store. Perfect for a relaxing weekend getaway.",
-			Location:    "Lake Tahoe, Nevada",
-			Price:       28.00,
+			Title:       "Redwood National Park",
+			Description: "Experience the majesty of the world's tallest trees in this pristine wilderness setting. Perfect for hiking, photography, and connecting with nature.",
+			Location:    "Crescent City, California",
+			Price:       25.00,
 			AuthorID:    userIDs[0], // igoswamik
 			Images: []Image{
 				{
 					URL:      "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=800&h=600&fit=crop",
-					Filename: "lakeside-paradise-1.jpg",
-					Key:      "yelpcamp/lakeside-paradise-1",
+					Filename: "redwood-1.jpg",
+					Key:      "yelpcamp/redwood-1",
 				},
 			},
+			CreatedAt: time.Now().AddDate(0, 0, -10),
+			UpdatedAt: time.Now().AddDate(0, 0, -10),
 		},
 		{
-			Title:       "Desert Oasis",
-			Description: "Discover the beauty of the desert landscape under star-filled skies. This unique campground offers a peaceful escape with stunning sunsets and sunrise views. Ideal for stargazing and desert photography.",
-			Location:    "Sedona, Arizona",
-			Price:       25.50,
+			Title:       "Grand Canyon South Rim",
+			Description: "Wake up to breathtaking views of one of the world's natural wonders. This campground offers unparalleled sunrise and sunset viewing opportunities.",
+			Location:    "Grand Canyon, Arizona",
+			Price:       35.00,
 			AuthorID:    userIDs[1], // hannah
 			Images: []Image{
 				{
 					URL:      "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?w=800&h=600&fit=crop",
-					Filename: "desert-oasis-1.jpg",
-					Key:      "yelpcamp/desert-oasis-1",
+					Filename: "grand-canyon-1.jpg",
+					Key:      "yelpcamp/grand-canyon-1",
 				},
 			},
+			CreatedAt: time.Now().AddDate(0, 0, -8),
+			UpdatedAt: time.Now().AddDate(0, 0, -8),
 		},
 		{
-			Title:       "Forest Haven",
-			Description: "Immerse yourself in old-growth forest with towering trees and peaceful hiking trails. This campground offers a true back-to-nature experience with minimal amenities for the adventurous camper.",
-			Location:    "Olympic National Park, Washington",
-			Price:       20.00,
+			Title:       "Yellowstone Lake Lodge",
+			Description: "Camp beside the pristine waters of Yellowstone Lake with opportunities for fishing, boating, and wildlife viewing. Hot springs nearby!",
+			Location:    "Yellowstone National Park, Wyoming",
+			Price:       40.00,
 			AuthorID:    userIDs[2], // bob
 			Images: []Image{
 				{
-					URL:      "https://images.unsplash.com/photo-1571863533956-01c88e79957e?w=800&h=600&fit=crop",
-					Filename: "forest-haven-1.jpg",
-					Key:      "yelpcamp/forest-haven-1",
+					URL:      "https://images.unsplash.com/photo-1504851149312-7a075b496cc7?w=800&h=600&fit=crop",
+					Filename: "yellowstone-1.jpg",
+					Key:      "yelpcamp/yellowstone-1",
 				},
 			},
+			CreatedAt: time.Now().AddDate(0, 0, -6),
+			UpdatedAt: time.Now().AddDate(0, 0, -6),
 		},
 		{
-			Title:       "Coastal Bluffs",
-			Description: "Camp on dramatic coastal bluffs with panoramic ocean views. Listen to the waves crash below while enjoying spectacular sunsets. Features include wind-resistant fire pits and ocean access trails.",
-			Location:    "Big Sur, California",
-			Price:       42.00,
+			Title:       "Yosemite Valley Floor",
+			Description: "Camp in the heart of Yosemite Valley with iconic views of El Capitan and Half Dome. Rock climbing and hiking trails accessible from camp.",
+			Location:    "Yosemite National Park, California",
+			Price:       45.00,
 			AuthorID:    userIDs[3], // alice
 			Images: []Image{
 				{
-					URL:      "https://images.unsplash.com/photo-1571863533956-01c88e79957e?w=800&h=600&fit=crop",
-					Filename: "coastal-bluffs-1.jpg",
-					Key:      "yelpcamp/coastal-bluffs-1",
+					URL:      "https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=800&h=600&fit=crop",
+					Filename: "yosemite-1.jpg",
+					Key:      "yelpcamp/yosemite-1",
 				},
 			},
+			CreatedAt: time.Now().AddDate(0, 0, -4),
+			UpdatedAt: time.Now().AddDate(0, 0, -4),
+		},
+		{
+			Title:       "Glacier Point Overlook",
+			Description: "Spectacular mountain camping with panoramic views of snow-capped peaks and alpine lakes. Perfect for stargazing and photography.",
+			Location:    "Glacier National Park, Montana",
+			Price:       30.00,
+			AuthorID:    userIDs[0], // igoswamik
+			Images: []Image{
+				{
+					URL:      "https://images.unsplash.com/photo-1445308394109-4ec2920981b1?w=800&h=600&fit=crop",
+					Filename: "glacier-1.jpg",
+					Key:      "yelpcamp/glacier-1",
+				},
+			},
+			CreatedAt: time.Now().AddDate(0, 0, -2),
+			UpdatedAt: time.Now().AddDate(0, 0, -2),
+		},
+		{
+			Title:       "Zion Canyon Riverside",
+			Description: "Camp along the Virgin River with towering red rock formations surrounding you. Easy access to hiking trails and the famous Narrows.",
+			Location:    "Zion National Park, Utah",
+			Price:       32.00,
+			AuthorID:    userIDs[1], // hannah
+			Images: []Image{
+				{
+					URL:      "https://images.unsplash.com/photo-1487730116645-74489c95b41b?w=800&h=600&fit=crop",
+					Filename: "zion-1.jpg",
+					Key:      "yelpcamp/zion-1",
+				},
+			},
+			CreatedAt: time.Now().AddDate(0, 0, -1),
+			UpdatedAt: time.Now().AddDate(0, 0, -1),
 		},
 	}
 	
-	// Insert campgrounds with different creation dates
+	// Insert campgrounds
 	var campgroundIDs []primitive.ObjectID
+	log.Println("🏕️ Creating sample campgrounds...")
 	for i := range campgrounds {
-		// Set creation time to simulate different dates
-		campgrounds[i].CreatedAt = time.Now().AddDate(0, 0, -(i+1)*2) // 2, 4, 6, 8, 10, 12, 14, 16 days ago
-		campgrounds[i].UpdatedAt = campgrounds[i].CreatedAt
+		log.Printf("Creating campground: %s", campgrounds[i].Title)
 		
-		if err := campgrounds[i].Create(db); err != nil {
-			log.Printf("Error creating campground %s: %v", campgrounds[i].Title, err)
+		// Use direct MongoDB insertion to ensure it works
+		collection := db.Collection("campgrounds")
+		campgrounds[i].ID = primitive.NewObjectID()
+		
+		_, err := collection.InsertOne(context.Background(), campgrounds[i])
+		if err != nil {
+			log.Printf("❌ Error creating campground %s: %v", campgrounds[i].Title, err)
 			continue
 		}
+		
 		campgroundIDs = append(campgroundIDs, campgrounds[i].ID)
-		log.Printf("✅ Created campground: %s", campgrounds[i].Title)
+		log.Printf("✅ Created campground: %s (ID: %s)", campgrounds[i].Title, campgrounds[i].ID.Hex())
 	}
+	
+	log.Printf("✅ Successfully created %d campgrounds", len(campgroundIDs))
 	
 	// Create sample reviews
 	if len(campgroundIDs) > 0 && len(userIDs) > 0 {
+		log.Println("⭐ Creating sample reviews...")
 		reviews := []Review{
 			{
 				Rating:       5,
-				Body:         "I love this place.",
+				Body:         "Absolutely breathtaking! The redwoods are magnificent and the campground is well-maintained.",
 				AuthorID:     userIDs[1], // hannah
-				CampgroundID: campgroundIDs[0], // Redwood, Flats
+				CampgroundID: campgroundIDs[0], // Redwood
+				CreatedAt:    time.Now().AddDate(0, 0, -5),
+				UpdatedAt:    time.Now().AddDate(0, 0, -5),
 			},
 			{
 				Rating:       5,
-				Body:         "Really cool place to visited. I would love to go again.",
+				Body:         "Best camping experience ever! The sunrise over the canyon was unforgettable.",
 				AuthorID:     userIDs[0], // igoswamik
-				CampgroundID: campgroundIDs[0], // Redwood, Flats
-			},
-			{
-				Rating:       5,
-				Body:         "One of my favorite places to visit!",
-				AuthorID:     userIDs[2], // bob
-				CampgroundID: campgroundIDs[0], // Redwood, Flats
+				CampgroundID: campgroundIDs[1], // Grand Canyon
+				CreatedAt:    time.Now().AddDate(0, 0, -4),
+				UpdatedAt:    time.Now().AddDate(0, 0, -4),
 			},
 			{
 				Rating:       4,
-				Body:         "Beautiful scenery and well-maintained facilities. The hiking trails are amazing!",
-				AuthorID:     userIDs[3], // alice
-				CampgroundID: campgroundIDs[1], // Cascade, Cliffs
-			},
-			{
-				Rating:       5,
-				Body:         "Perfect spot for a peaceful getaway. The creek sounds were so relaxing.",
-				AuthorID:     userIDs[0], // igoswamik
-				CampgroundID: campgroundIDs[2], // Petrified, Creekside
-			},
-			{
-				Rating:       5,
-				Body:         "Absolutely stunning mountain views! Worth every penny.",
-				AuthorID:     userIDs[1], // hannah
-				CampgroundID: campgroundIDs[3], // Mountain View Retreat
-			},
-			{
-				Rating:       4,
-				Body:         "Great for families! Kids loved swimming in the lake.",
+				Body:         "Great location with amazing wildlife viewing opportunities. Saw elk and bison!",
 				AuthorID:     userIDs[2], // bob
-				CampgroundID: campgroundIDs[4], // Lakeside Paradise
+				CampgroundID: campgroundIDs[2], // Yellowstone
+				CreatedAt:    time.Now().AddDate(0, 0, -3),
+				UpdatedAt:    time.Now().AddDate(0, 0, -3),
 			},
 		}
 		
+		reviewCollection := db.Collection("reviews")
 		for i := range reviews {
-			reviews[i].CreatedAt = time.Now().AddDate(0, 0, -(i+1)) // 1, 2, 3, 4, 5, 6, 7 days ago
-			reviews[i].UpdatedAt = reviews[i].CreatedAt
+			reviews[i].ID = primitive.NewObjectID()
 			
-			if err := reviews[i].Create(db); err != nil {
-				log.Printf("Error creating review: %v", err)
+			_, err := reviewCollection.InsertOne(context.Background(), reviews[i])
+			if err != nil {
+				log.Printf("❌ Error creating review: %v", err)
 				continue
 			}
+			log.Printf("✅ Created review for campground: %s", campgroundIDs[i%len(campgroundIDs)].Hex())
 		}
-		log.Printf("✅ Created %d reviews", len(reviews))
+		log.Printf("✅ Successfully created %d reviews", len(reviews))
 	}
 	
-	log.Println("🎉 Sample data seeding completed!")
-	log.Println("📊 Created:")
-	log.Printf("   - %d users", len(userIDs))
-	log.Printf("   - %d campgrounds", len(campgroundIDs))
-	log.Println("   - Multiple reviews")
+	// Verify the data was created
+	finalCount, err := db.Collection("campgrounds").CountDocuments(context.Background(), map[string]interface{}{})
+	if err != nil {
+		log.Printf("❌ Error verifying campground count: %v", err)
+	} else {
+		log.Printf("✅ Final campground count: %d", finalCount)
+	}
+	
+	userCount, err := db.Collection("users").CountDocuments(context.Background(), map[string]interface{}{})
+	if err != nil {
+		log.Printf("❌ Error verifying user count: %v", err)
+	} else {
+		log.Printf("✅ Final user count: %d", userCount)
+	}
+	
+	log.Println("🎉 Sample data seeding completed successfully!")
+	log.Println("📊 Summary:")
+	log.Printf("   - %d users created", len(userIDs))
+	log.Printf("   - %d campgrounds created", len(campgroundIDs))
+	log.Printf("   - Multiple reviews created")
 	log.Println("")
-	log.Println("🔐 All sample users have password: password123")
-	log.Println("🌐 Visit /campgrounds to see the sample data!")
-}
-
-// ForceSeedData clears existing data and creates fresh sample data
-func ForceSeedData() {
-	db := config.GetDB()
-	
-	log.Println("🧹 Clearing existing data...")
-	
-	// Clear existing data
-	db.Collection("reviews").DeleteMany(context.Background(), map[string]interface{}{})
-	db.Collection("campgrounds").DeleteMany(context.Background(), map[string]interface{}{})
-	db.Collection("users").DeleteMany(context.Background(), map[string]interface{}{})
-	
-	log.Println("✅ Cleared existing data")
-	
-	// Seed fresh data
-	SeedData()
+	log.Println("🔐 Demo login credentials:")
+	log.Println("   Username: igoswamik")
+	log.Println("   Password: password123")
+	log.Println("")
+	log.Println("🌐 Visit http://localhost:3000/campgrounds to see the campgrounds!")
 }

@@ -11,12 +11,7 @@ import (
 	"yelpcamp-go/models"
 )
 
-func SetupWebRoutes(r *gin.Engine) {
-	// Initialize controllers
-	authController := controllers.NewAuthController()
-	campgroundController := controllers.NewCampgroundController()
-	reviewController := controllers.NewReviewController()
-
+func SetupWebRoutes(r *gin.Engine, authController *controllers.AuthController, campgroundController *controllers.CampgroundController, reviewController *controllers.ReviewController) {
 	// Homepage
 	r.GET("/", func(c *gin.Context) {
 		c.HTML(http.StatusOK, "index.html", gin.H{
@@ -25,14 +20,22 @@ func SetupWebRoutes(r *gin.Engine) {
 		})
 	})
 
-	// Campgrounds listing
+	// Campgrounds listing - PUBLIC (no auth required)
 	r.GET("/campgrounds", func(c *gin.Context) {
 		db := config.GetDB()
+		if db == nil {
+			c.HTML(http.StatusInternalServerError, "error.html", gin.H{
+				"title": "Error",
+				"error": "Database connection failed",
+			})
+			return
+		}
+
 		campgrounds, err := models.FindAllCampgrounds(db)
 		if err != nil {
 			c.HTML(http.StatusInternalServerError, "error.html", gin.H{
 				"title": "Error",
-				"error": "Could not load campgrounds",
+				"error": "Could not load campgrounds: " + err.Error(),
 			})
 			return
 		}
@@ -43,7 +46,7 @@ func SetupWebRoutes(r *gin.Engine) {
 		})
 	})
 
-	// Individual campground
+	// Individual campground - PUBLIC (no auth required)
 	r.GET("/campgrounds/:id", func(c *gin.Context) {
 		idParam := c.Param("id")
 		id, err := primitive.ObjectIDFromHex(idParam)

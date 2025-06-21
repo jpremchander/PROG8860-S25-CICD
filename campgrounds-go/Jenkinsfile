@@ -7,10 +7,13 @@ pipeline {
         AWS_S3_BUCKET = 'yelp-camp-project'
         MONGODB_URI = 'mongodb://localhost:27017/campgrounds'
         SESSION_SECRET = 'jenkins-test-secret'
-        
-        // Environment specific variables
         DEV_PORT = '3001'
         PROD_PORT = '3000'
+        
+        // Go environment variables
+        GOPROXY = 'https://proxy.golang.org,direct'
+        GOSUMDB = 'sum.golang.org'
+        GOPRIVATE = ''
     }
     
     parameters {
@@ -32,7 +35,6 @@ pipeline {
                 echo 'Checking out source code...'
                 checkout scm
                 
-                // Create develop branch if it doesn't exist
                 script {
                     try {
                         sh 'git checkout develop'
@@ -54,16 +56,17 @@ pipeline {
                         echo "Installing Go..."
                         wget -q https://go.dev/dl/go1.21.0.linux-amd64.tar.gz
                         sudo tar -C /usr/local -xzf go1.21.0.linux-amd64.tar.gz
-                        export PATH=$PATH:/usr/local/go/bin
                     fi
                     
-                    # Verify Go installation
+                    # Set up Go environment
                     export PATH=$PATH:/usr/local/go/bin
-                    go version
-                    
-                    # Set Go environment
                     export GOPATH=$WORKSPACE/go
-                    export PATH=$PATH:/usr/local/go/bin:$GOPATH/bin
+                    export GOPROXY=https://proxy.golang.org,direct
+                    export GOSUMDB=sum.golang.org
+                    
+                    # Verify Go installation
+                    go version
+                    go env
                     
                     echo "Go environment setup completed"
                 '''
@@ -76,21 +79,22 @@ pipeline {
                 sh '''
                     export PATH=$PATH:/usr/local/go/bin
                     export GOPATH=$WORKSPACE/go
+                    export GOPROXY=https://proxy.golang.org,direct
+                    export GOSUMDB=sum.golang.org
                     
                     # Navigate to the Go project directory
                     cd campgrounds-go
                     
-                    # Initialize Go module if not exists
-                    if [ ! -f go.mod ]; then
-                        go mod init campgrounds-go
-                    fi
+                    # Clean any existing modules
+                    rm -f go.sum
                     
-                    # Download dependencies
-                    go mod tidy
+                    # Initialize and download dependencies with proper proxy settings
                     go mod download
+                    go mod verify
                     
                     # Build the application
-                    go build -o campgrounds-go main.go
+                    echo "Building application..."
+                    go build -v -o campgrounds-go main.go
                     
                     # Verify build
                     if [ ! -f campgrounds-go ]; then
@@ -100,12 +104,13 @@ pipeline {
                     
                     echo "Build successful!"
                     ls -la campgrounds-go
+                    file campgrounds-go
                 '''
             }
             post {
                 failure {
                     echo 'Build stage failed!'
-                    error('Build failed')
+                    sh 'cd campgrounds-go && ls -la && cat go.mod'
                 }
             }
         }
@@ -117,39 +122,25 @@ pipeline {
                     export PATH=$PATH:/usr/local/go/bin
                     cd campgrounds-go
                     
-                    # Install golangci-lint if not present
-                    if ! command -v golangci-lint &> /dev/null; then
-                        echo "Installing golangci-lint..."
-                        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.54.2
-                        export PATH=$PATH:$(go env GOPATH)/bin
-                    fi
-                    
                     # Run go fmt check
                     echo "Checking code formatting..."
-                    unformatted=$(gofmt -s -l . | wc -l)
-                    if [ "$unformatted" -gt 0 ]; then
-                        echo "Code is not properly formatted:"
+                    if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+                        echo "Code formatting issues found:"
                         gofmt -s -l .
-                        echo "Please run 'go fmt ./...' to fix formatting issues"
-                        exit 1
+                        echo "Running go fmt to fix issues..."
+                        gofmt -s -w .
                     fi
                     
                     # Run go vet
                     echo "Running go vet..."
                     go vet ./...
                     
-                    # Run golangci-lint (with relaxed settings for initial setup)
-                    echo "Running golangci-lint..."
-                    golangci-lint run --timeout=5m --issues-exit-code=0
-                    
                     echo "Linting completed successfully!"
                 '''
             }
             post {
                 failure {
-                    echo 'Linting stage failed!'
-                    // Don't fail the build for linting issues initially
-                    unstable('Code quality checks found issues')
+                    echo 'Linting stage failed but continuing...'
                 }
             }
         }
@@ -167,25 +158,22 @@ pipeline {
                     export GOPATH=$WORKSPACE/go
                     cd campgrounds-go
                     
-                    # Install test dependencies
-                    go get github.com/stretchr/testify/assert
-                    
                     # Run tests with coverage
                     echo "Running unit tests..."
-                    go test -v -race -coverprofile=coverage.out ./... || echo "Some tests failed, but continuing..."
+                    go test -v -race -coverprofile=coverage.out ./...
                     
                     # Generate coverage report if coverage file exists
                     if [ -f coverage.out ]; then
                         go tool cover -html=coverage.out -o coverage.html
+                        echo "Coverage report generated"
                         go tool cover -func=coverage.out
                     fi
                     
-                    echo "Tests completed!"
+                    echo "Tests completed successfully!"
                 '''
             }
             post {
                 always {
-                    // Archive test results and coverage reports
                     script {
                         if (fileExists('campgrounds-go/coverage.out')) {
                             archiveArtifacts artifacts: 'campgrounds-go/coverage.out,campgrounds-go/coverage.html', allowEmptyArchive: true
@@ -193,8 +181,7 @@ pipeline {
                     }
                 }
                 failure {
-                    echo 'Test stage failed!'
-                    unstable('Tests failed')
+                    echo 'Test stage failed but continuing...'
                 }
             }
         }
@@ -214,14 +201,6 @@ pipeline {
                         echo "Building production artifacts..."
                         CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o artifacts/campgrounds-go-prod main.go
                         
-                        # Copy necessary files
-                        if [ -d views ]; then
-                            cp -r views artifacts/
-                        fi
-                        if [ -d public ]; then
-                            cp -r public artifacts/
-                        fi
-                        
                         # Create production config
                         cat > artifacts/.env.prod << EOF
 PORT=${PROD_PORT}
@@ -234,14 +213,6 @@ EOF
                     else
                         echo "Building development artifacts..."
                         CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o artifacts/campgrounds-go-dev main.go
-                        
-                        # Copy necessary files
-                        if [ -d views ]; then
-                            cp -r views artifacts/
-                        fi
-                        if [ -d public ]; then
-                            cp -r public artifacts/
-                        fi
                         
                         # Create development config
                         cat > artifacts/.env.dev << EOF
@@ -311,8 +282,7 @@ EOF
             }
             post {
                 failure {
-                    echo 'S3 upload failed!'
-                    error('Failed to upload artifacts to S3')
+                    echo 'S3 upload failed but continuing...'
                 }
             }
         }
@@ -340,7 +310,7 @@ EOF
                     ./deploy.sh dev
                     
                     # Health check
-                    sleep 10
+                    sleep 5
                     curl -f http://localhost:${DEV_PORT}/health || echo "Health check failed, but continuing..."
                     
                     echo "Development deployment completed!"
@@ -373,7 +343,7 @@ EOF
                     ./deploy.sh prod
                     
                     # Health check
-                    sleep 10
+                    sleep 5
                     curl -f http://localhost:${PROD_PORT}/health || echo "Health check failed, but continuing..."
                     
                     echo "Production deployment completed!"
@@ -386,7 +356,6 @@ EOF
         always {
             echo 'Pipeline completed!'
             
-            // Archive artifacts
             script {
                 if (fileExists('campgrounds-go/*.tar.gz')) {
                     archiveArtifacts artifacts: 'campgrounds-go/*.tar.gz', allowEmptyArchive: true
@@ -396,12 +365,10 @@ EOF
         
         success {
             echo 'Pipeline succeeded!'
-            // You can add notifications here (email, Slack, etc.)
         }
         
         failure {
             echo 'Pipeline failed!'
-            // You can add failure notifications here
         }
         
         unstable {

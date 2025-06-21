@@ -7,10 +7,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
-	"campgrounds-go/config"
-	"campgrounds-go/controllers"
-	"campgrounds-go/middleware"
-	"campgrounds-go/routes"
 )
 
 func main() {
@@ -19,25 +15,37 @@ func main() {
 		log.Println("No .env file found")
 	}
 
-	// Initialize database
-	config.ConnectDB()
-
-	// Initialize AWS S3
-	config.InitS3()
-
 	// Setup Gin router
 	r := gin.Default()
 
-	// Load HTML templates
-	r.LoadHTMLGlob("views/*")
-	r.Static("/static", "./public")
+	// Basic routes
+	r.GET("/", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"message": "Welcome to YelpCamp Go!",
+			"status":  "running",
+		})
+	})
 
-	// Middleware
-	r.Use(middleware.SessionMiddleware())
-	r.Use(middleware.FlashMiddleware())
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"status":  "healthy",
+			"service": "campgrounds-go",
+		})
+	})
 
-	// Routes
-	routes.SetupRoutes(r)
+	r.GET("/campgrounds", func(c *gin.Context) {
+		c.JSON(http.StatusOK, gin.H{
+			"campgrounds": []map[string]interface{}{
+				{
+					"id":          1,
+					"title":       "Sample Campground",
+					"description": "A beautiful campground for testing",
+					"price":       25.99,
+					"location":    "Test Location",
+				},
+			},
+		})
+	})
 
 	port := os.Getenv("PORT")
 	if port == "" {

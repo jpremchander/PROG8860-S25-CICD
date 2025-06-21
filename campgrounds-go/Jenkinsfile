@@ -1,0 +1,367 @@
+pipeline {
+    agent any
+    
+    environment {
+        GO_VERSION = '1.21'
+        AWS_DEFAULT_REGION = 'ca-central-1'
+        AWS_S3_BUCKET = 'yelp-camp-project'
+        MONGODB_URI = 'mongodb://localhost:27017/campgrounds'
+        SESSION_SECRET = 'jenkins-test-secret'
+        
+        // Environment specific variables
+        DEV_PORT = '3001'
+        PROD_PORT = '3000'
+    }
+    
+    parameters {
+        choice(
+            name: 'DEPLOY_ENV',
+            choices: ['dev', 'prod'],
+            description: 'Select deployment environment'
+        )
+        booleanParam(
+            name: 'SKIP_TESTS',
+            defaultValue: false,
+            description: 'Skip running tests'
+        )
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                echo 'Checking out source code...'
+                checkout scm
+                
+                // Create develop branch if it doesn't exist
+                script {
+                    try {
+                        sh 'git checkout develop'
+                    } catch (Exception e) {
+                        sh 'git checkout -b develop'
+                        sh 'git push origin develop'
+                    }
+                }
+            }
+        }
+        
+        stage('Setup Go Environment') {
+            steps {
+                echo 'Setting up Go environment...'
+                sh '''
+                    # Install Go if not present
+                    if ! command -v go &> /dev/null; then
+                        wget https://go.dev/dl/go1.21.0.linux-amd64.tar.gz
+                        sudo tar -C /usr/local -xzf go1.21.0.linux-amd64.tar.gz
+                        export PATH=$PATH:/usr/local/go/bin
+                    fi
+                    
+                    # Verify Go installation
+                    go version
+                    
+                    # Set Go environment
+                    export GOPATH=$WORKSPACE/go
+                    export PATH=$PATH:/usr/local/go/bin:$GOPATH/bin
+                    
+                    # Initialize Go module if not exists
+                    if [ ! -f go.mod ]; then
+                        go mod init campgrounds-go
+                    fi
+                '''
+            }
+        }
+        
+        stage('Build') {
+            steps {
+                echo 'Building the application...'
+                sh '''
+                    export PATH=$PATH:/usr/local/go/bin
+                    export GOPATH=$WORKSPACE/go
+                    
+                    # Download dependencies
+                    go mod tidy
+                    go mod download
+                    
+                    # Build the application
+                    go build -o campgrounds-go main.go
+                    
+                    # Verify build
+                    if [ ! -f campgrounds-go ]; then
+                        echo "Build failed: executable not found"
+                        exit 1
+                    fi
+                    
+                    echo "Build successful!"
+                    ls -la campgrounds-go
+                '''
+            }
+            post {
+                failure {
+                    echo 'Build stage failed!'
+                    error('Build failed')
+                }
+            }
+        }
+        
+        stage('Lint & Static Analysis') {
+            steps {
+                echo 'Running linting and static analysis...'
+                sh '''
+                    export PATH=$PATH:/usr/local/go/bin
+                    
+                    # Install golangci-lint if not present
+                    if ! command -v golangci-lint &> /dev/null; then
+                        curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.54.2
+                        export PATH=$PATH:$(go env GOPATH)/bin
+                    fi
+                    
+                    # Run go fmt check
+                    echo "Checking code formatting..."
+                    if [ "$(gofmt -s -l . | wc -l)" -gt 0 ]; then
+                        echo "Code is not properly formatted:"
+                        gofmt -s -l .
+                        echo "Please run 'go fmt ./...' to fix formatting issues"
+                        exit 1
+                    fi
+                    
+                    # Run go vet
+                    echo "Running go vet..."
+                    go vet ./...
+                    
+                    # Run golangci-lint
+                    echo "Running golangci-lint..."
+                    golangci-lint run --timeout=5m
+                    
+                    echo "Linting completed successfully!"
+                '''
+            }
+            post {
+                failure {
+                    echo 'Linting stage failed!'
+                    error('Code quality checks failed')
+                }
+            }
+        }
+        
+        stage('Test') {
+            when {
+                not { params.SKIP_TESTS }
+            }
+            steps {
+                echo 'Running tests...'
+                sh '''
+                    export PATH=$PATH:/usr/local/go/bin
+                    export GOPATH=$WORKSPACE/go
+                    
+                    # Install test dependencies
+                    go get github.com/stretchr/testify/assert
+                    
+                    # Run tests with coverage
+                    echo "Running unit tests..."
+                    go test -v -race -coverprofile=coverage.out ./...
+                    
+                    # Generate coverage report
+                    go tool cover -html=coverage.out -o coverage.html
+                    
+                    # Display coverage summary
+                    go tool cover -func=coverage.out
+                    
+                    echo "Tests completed successfully!"
+                '''
+            }
+            post {
+                always {
+                    // Archive test results and coverage reports
+                    archiveArtifacts artifacts: 'coverage.out,coverage.html', allowEmptyArchive: true
+                }
+                failure {
+                    echo 'Test stage failed!'
+                    error('Tests failed')
+                }
+            }
+        }
+        
+        stage('Build Artifacts') {
+            steps {
+                echo 'Creating deployment artifacts...'
+                sh '''
+                    export PATH=$PATH:/usr/local/go/bin
+                    
+                    # Create artifacts directory
+                    mkdir -p artifacts
+                    
+                    # Build for different environments
+                    if [ "${DEPLOY_ENV}" = "prod" ]; then
+                        echo "Building production artifacts..."
+                        CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o artifacts/campgrounds-go-prod main.go
+                        cp -r views artifacts/
+                        cp -r public artifacts/ 2>/dev/null || echo "No public directory found"
+                        
+                        # Create production config
+                        cat > artifacts/.env.prod << EOF
+PORT=${PROD_PORT}
+GIN_MODE=release
+MONGODB_URI=${MONGODB_URI}
+AWS_REGION=${AWS_DEFAULT_REGION}
+AWS_S3_BUCKET=${AWS_S3_BUCKET}
+SESSION_SECRET=${SESSION_SECRET}
+EOF
+                    else
+                        echo "Building development artifacts..."
+                        CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o artifacts/campgrounds-go-dev main.go
+                        cp -r views artifacts/
+                        cp -r public artifacts/ 2>/dev/null || echo "No public directory found"
+                        
+                        # Create development config
+                        cat > artifacts/.env.dev << EOF
+PORT=${DEV_PORT}
+GIN_MODE=debug
+MONGODB_URI=${MONGODB_URI}
+AWS_REGION=${AWS_DEFAULT_REGION}
+AWS_S3_BUCKET=${AWS_S3_BUCKET}
+SESSION_SECRET=${SESSION_SECRET}
+EOF
+                    fi
+                    
+                    # Create deployment script
+                    cat > artifacts/deploy.sh << 'EOF'
+#!/bin/bash
+ENV=${1:-dev}
+echo "Deploying to $ENV environment..."
+
+# Stop existing process
+pkill -f campgrounds-go-$ENV || echo "No existing process found"
+
+# Start new process
+if [ "$ENV" = "prod" ]; then
+    nohup ./campgrounds-go-prod > campgrounds-prod.log 2>&1 &
+    echo "Production server started on port ${PROD_PORT}"
+else
+    nohup ./campgrounds-go-dev > campgrounds-dev.log 2>&1 &
+    echo "Development server started on port ${DEV_PORT}"
+fi
+
+echo "Deployment completed!"
+EOF
+                    
+                    chmod +x artifacts/deploy.sh
+                    
+                    # Create archive
+                    tar -czf campgrounds-go-${DEPLOY_ENV}-${BUILD_NUMBER}.tar.gz -C artifacts .
+                    
+                    echo "Artifacts created successfully!"
+                    ls -la artifacts/
+                    ls -la *.tar.gz
+                '''
+            }
+        }
+        
+        stage('Upload to S3') {
+            steps {
+                echo 'Uploading artifacts to S3...'
+                withCredentials([aws(credentialsId: 'AWSCREDENTIALS', region: 'ca-central-1')]) {
+                    sh '''
+                        # Upload artifacts to S3
+                        aws s3 cp campgrounds-go-${DEPLOY_ENV}-${BUILD_NUMBER}.tar.gz \
+                            s3://${AWS_S3_BUCKET}/artifacts/${DEPLOY_ENV}/campgrounds-go-${BUILD_NUMBER}.tar.gz
+                        
+                        # Upload latest version
+                        aws s3 cp campgrounds-go-${DEPLOY_ENV}-${BUILD_NUMBER}.tar.gz \
+                            s3://${AWS_S3_BUCKET}/artifacts/${DEPLOY_ENV}/campgrounds-go-latest.tar.gz
+                        
+                        echo "Artifacts uploaded to S3 successfully!"
+                        
+                        # List uploaded files
+                        aws s3 ls s3://${AWS_S3_BUCKET}/artifacts/${DEPLOY_ENV}/
+                    '''
+                }
+            }
+            post {
+                failure {
+                    echo 'S3 upload failed!'
+                    error('Failed to upload artifacts to S3')
+                }
+            }
+        }
+        
+        stage('Deploy to Dev') {
+            when {
+                anyOf {
+                    branch 'develop'
+                    expression { params.DEPLOY_ENV == 'dev' }
+                }
+            }
+            steps {
+                echo 'Deploying to Development environment...'
+                sh '''
+                    # Extract artifacts
+                    tar -xzf campgrounds-go-dev-${BUILD_NUMBER}.tar.gz -C /tmp/campgrounds-dev/
+                    
+                    # Deploy to development
+                    cd /tmp/campgrounds-dev/
+                    ./deploy.sh dev
+                    
+                    # Health check
+                    sleep 5
+                    curl -f http://localhost:${DEV_PORT}/health || exit 1
+                    
+                    echo "Development deployment successful!"
+                '''
+            }
+        }
+        
+        stage('Deploy to Production') {
+            when {
+                anyOf {
+                    branch 'main'
+                    expression { params.DEPLOY_ENV == 'prod' }
+                }
+            }
+            steps {
+                echo 'Deploying to Production environment...'
+                input message: 'Deploy to Production?', ok: 'Deploy'
+                
+                sh '''
+                    # Extract artifacts
+                    mkdir -p /tmp/campgrounds-prod/
+                    tar -xzf campgrounds-go-prod-${BUILD_NUMBER}.tar.gz -C /tmp/campgrounds-prod/
+                    
+                    # Deploy to production
+                    cd /tmp/campgrounds-prod/
+                    ./deploy.sh prod
+                    
+                    # Health check
+                    sleep 5
+                    curl -f http://localhost:${PROD_PORT}/health || exit 1
+                    
+                    echo "Production deployment successful!"
+                '''
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo 'Pipeline completed!'
+            
+            // Archive artifacts
+            archiveArtifacts artifacts: '*.tar.gz', allowEmptyArchive: true
+            
+            // Clean workspace
+            cleanWs()
+        }
+        
+        success {
+            echo 'Pipeline succeeded!'
+            // You can add notifications here (email, Slack, etc.)
+        }
+        
+        failure {
+            echo 'Pipeline failed!'
+            // You can add failure notifications here
+        }
+        
+        unstable {
+            echo 'Pipeline is unstable!'
+        }
+    }
+}

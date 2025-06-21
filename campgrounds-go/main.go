@@ -33,7 +33,7 @@ var campgrounds = []Campground{
 		Price:       25.99,
 		Description: "A beautiful campground with stunning sunset views over the Rocky Mountains",
 		Location:    "Rocky Mountains, Colorado",
-		Images:      []string{"https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=400", "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?w=400"},
+		Images:      []string{"https://images.unsplash.com/photo-1504280390367-361c6d9f38f4?w=400"},
 		CreatedAt:   time.Now(),
 	},
 	{
@@ -51,7 +51,7 @@ var campgrounds = []Campground{
 		Price:       20.00,
 		Description: "Deep forest camping for nature lovers with hiking trails and wildlife viewing",
 		Location:    "Olympic National Park, Washington",
-		Images:      []string{"https://images.unsplash.com/photo-1551632811-561732d1e306?w=400", "https://images.unsplash.com/photo-1486022119026-a0a0b4b7b7b7?w=400"},
+		Images:      []string{"https://images.unsplash.com/photo-1551632811-561732d1e306?w=400"},
 		CreatedAt:   time.Now(),
 	},
 }

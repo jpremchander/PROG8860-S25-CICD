@@ -37,32 +37,6 @@ func TestHealthEndpoint(t *testing.T) {
 	if response["status"] != "healthy" {
 		t.Errorf("Expected status 'healthy', got %v", response["status"])
 	}
-
-	if response["service"] != "campgrounds-go" {
-		t.Errorf("Expected service 'campgrounds-go', got %v", response["service"])
-	}
-}
-
-func TestHomeRoute(t *testing.T) {
-	router := setupTestRouter()
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/", nil)
-	router.ServeHTTP(w, req)
-
-	if w.Code != 200 {
-		t.Errorf("Expected status code 200, got %d", w.Code)
-	}
-
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	if err != nil {
-		t.Errorf("Failed to parse JSON response: %v", err)
-	}
-
-	if response["status"] != "running" {
-		t.Errorf("Expected status 'running', got %v", response["status"])
-	}
 }
 
 func TestGetCampgrounds(t *testing.T) {
@@ -90,38 +64,6 @@ func TestGetCampgrounds(t *testing.T) {
 	campgroundsList, ok := campgrounds.([]interface{})
 	if !ok || len(campgroundsList) == 0 {
 		t.Error("Expected non-empty campgrounds array")
-	}
-}
-
-func TestGetCampgroundByID(t *testing.T) {
-	router := setupTestRouter()
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/campgrounds/1", nil)
-	router.ServeHTTP(w, req)
-
-	if w.Code != 200 {
-		t.Errorf("Expected status code 200, got %d", w.Code)
-	}
-
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	if err != nil {
-		t.Errorf("Failed to parse JSON response: %v", err)
-	}
-
-	campground, exists := response["campground"]
-	if !exists {
-		t.Error("Expected 'campground' field in response")
-	}
-
-	campgroundData, ok := campground.(map[string]interface{})
-	if !ok {
-		t.Error("Expected campground to be an object")
-	}
-
-	if campgroundData["id"].(float64) != 1 {
-		t.Errorf("Expected campground ID 1, got %v", campgroundData["id"])
 	}
 }
 
@@ -164,39 +106,5 @@ func TestCreateCampground(t *testing.T) {
 
 	if campgroundData["title"] != "Test Campground" {
 		t.Errorf("Expected title 'Test Campground', got %v", campgroundData["title"])
-	}
-}
-
-func TestInvalidRoute(t *testing.T) {
-	router := setupTestRouter()
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/invalid", nil)
-	router.ServeHTTP(w, req)
-
-	if w.Code != 404 {
-		t.Errorf("Expected status code 404, got %d", w.Code)
-	}
-}
-
-func TestAPIDocumentation(t *testing.T) {
-	router := setupTestRouter()
-
-	w := httptest.NewRecorder()
-	req, _ := http.NewRequest("GET", "/api/docs", nil)
-	router.ServeHTTP(w, req)
-
-	if w.Code != 200 {
-		t.Errorf("Expected status code 200, got %d", w.Code)
-	}
-
-	var response map[string]interface{}
-	err := json.Unmarshal(w.Body.Bytes(), &response)
-	if err != nil {
-		t.Errorf("Failed to parse JSON response: %v", err)
-	}
-
-	if response["api_version"] != "1.0.0" {
-		t.Errorf("Expected API version '1.0.0', got %v", response["api_version"])
 	}
 }

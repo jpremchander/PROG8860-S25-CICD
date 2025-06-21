@@ -156,8 +156,8 @@ pipeline {
         
         stage('Test') {
             when {
-                not { 
-                    params.SKIP_TESTS == true 
+                expression { 
+                    return !params.SKIP_TESTS 
                 }
             }
             steps {
@@ -321,7 +321,7 @@ EOF
             when {
                 anyOf {
                     branch 'develop'
-                    expression { params.DEPLOY_ENV == 'dev' }
+                    expression { return params.DEPLOY_ENV == 'dev' }
                 }
             }
             steps {
@@ -352,7 +352,7 @@ EOF
             when {
                 anyOf {
                     branch 'main'
-                    expression { params.DEPLOY_ENV == 'prod' }
+                    expression { return params.DEPLOY_ENV == 'prod' }
                 }
             }
             steps {

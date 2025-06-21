@@ -39,13 +39,12 @@ func main() {
 	// Initialize Gin router
 	router := gin.Default()
 
-	// Add CORS middleware (using the correct function name)
+	// Add CORS middleware
 	router.Use(middleware.CORS())
 	router.Use(middleware.Logger())
 
 	// Serve static files
 	router.Static("/static", "./static")
-	router.Static("/public", "./public")
 
 	// Load HTML templates
 	router.LoadHTMLGlob("templates/*")
@@ -55,27 +54,12 @@ func main() {
 	campgroundController := controllers.NewCampgroundController()
 	reviewController := controllers.NewReviewController()
 
-	// Basic routes
-	router.GET("/", func(c *gin.Context) {
-		c.HTML(http.StatusOK, "index.html", gin.H{
-			"title": "YelpCamp - Discover Amazing Campgrounds",
-		})
-	})
-
 	// Health check endpoints
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":         "healthy",
-			"timestamp":      "2025-06-21T13:30:00Z",
+			"timestamp":      "2025-06-21T14:00:00Z",
 			"version":        "1.0.0",
-			"jwt_configured": os.Getenv("JWT_SECRET") != "",
-		})
-	})
-
-	router.GET("/api/health", func(c *gin.Context) {
-		c.JSON(http.StatusOK, gin.H{
-			"status":         "API is running",
-			"database":       "connected",
 			"jwt_configured": os.Getenv("JWT_SECRET") != "",
 		})
 	})
@@ -83,6 +67,13 @@ func main() {
 	// API routes
 	api := router.Group("/api")
 	{
+		api.GET("/health", func(c *gin.Context) {
+			c.JSON(http.StatusOK, gin.H{
+				"status":   "API is running",
+				"database": "connected",
+			})
+		})
+
 		// Campgrounds API (using correct method names)
 		api.GET("/campgrounds", campgroundController.GetAll)
 		api.GET("/campgrounds/:id", campgroundController.GetByID)
@@ -104,7 +95,7 @@ func main() {
 		}
 	}
 
-	// Web routes (with all required parameters)
+	// Web routes
 	routes.SetupWebRoutes(router, authController, campgroundController, reviewController)
 
 	// Get port from environment or default to 3000
@@ -116,7 +107,6 @@ func main() {
 	log.Printf("🚀 YelpCamp Go Server starting on port %s", port)
 	log.Printf("🌐 Frontend: http://localhost:%s", port)
 	log.Printf("📡 API: http://localhost:%s/api/health", port)
-	log.Printf("🏕️  Campgrounds: http://localhost:%s/api/campgrounds", port)
 
 	// Start server
 	if err := router.Run(":" + port); err != nil {

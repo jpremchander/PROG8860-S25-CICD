@@ -6,7 +6,8 @@ pipeline {
         AWS_DEFAULT_REGION = 'ca-central-1'
         AWS_S3_BUCKET = 'yelp-camp-project'
         MONGODB_URI = 'mongodb://localhost:27017/campgrounds'
-        SESSION_SECRET = 'jenkins-test-secret'
+        
+        // Environment specific variables
         DEV_PORT = '3001'
         PROD_PORT = '3000'
         
@@ -76,36 +77,48 @@ pipeline {
         stage('Build') {
             steps {
                 echo 'Building the application...'
-                sh '''
-                    export PATH=$PATH:/usr/local/go/bin
-                    export GOPATH=$WORKSPACE/go
-                    export GOPROXY=https://proxy.golang.org,direct
-                    export GOSUMDB=sum.golang.org
-                    
-                    # Navigate to the Go project directory
-                    cd campgrounds-go
-                    
-                    # Clean any existing modules
-                    rm -f go.sum
-                    
-                    # Initialize and download dependencies with proper proxy settings
-                    go mod download
-                    go mod verify
-                    
-                    # Build the application
-                    echo "Building application..."
-                    go build -v -o campgrounds-go main.go
-                    
-                    # Verify build
-                    if [ ! -f campgrounds-go ]; then
-                        echo "Build failed: executable not found"
-                        exit 1
-                    fi
-                    
-                    echo "Build successful!"
-                    ls -la campgrounds-go
-                    file campgrounds-go
-                '''
+                withCredentials([usernamePassword(credentialsId: 'github-auth', usernameVariable: 'GIT_USERNAME', passwordVariable: 'GIT_PASSWORD')]) {
+                    sh '''
+                        export PATH=$PATH:/usr/local/go/bin
+                        export GOPATH=$WORKSPACE/go
+                        export GOPROXY=https://proxy.golang.org,direct
+                        export GOSUMDB=sum.golang.org
+                        
+                        # Configure Git credentials for Go module downloads
+                        git config --global credential.helper store
+                        echo "https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com" > ~/.git-credentials
+                        git config --global url."https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/".insteadOf "https://github.com/"
+                        
+                        # Navigate to the Go project directory
+                        cd campgrounds-go
+                        
+                        # Clean any existing modules
+                        rm -f go.sum
+                        
+                        # Initialize and download dependencies with proper authentication
+                        go mod download
+                        go mod verify
+                        
+                        # Build the application
+                        echo "Building application..."
+                        go build -v -o campgrounds-go main.go
+                        
+                        # Verify build
+                        if [ ! -f campgrounds-go ]; then
+                            echo "Build failed: executable not found"
+                            exit 1
+                        fi
+                        
+                        echo "Build successful!"
+                        ls -la campgrounds-go
+                        file campgrounds-go
+                        
+                        # Clean up credentials for security
+                        rm -f ~/.git-credentials
+                        git config --global --unset credential.helper
+                        git config --global --unset url."https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/".insteadOf
+                    '''
+                }
             }
             post {
                 failure {
@@ -189,72 +202,141 @@ pipeline {
         stage('Build Artifacts') {
             steps {
                 echo 'Creating deployment artifacts...'
-                sh '''
-                    export PATH=$PATH:/usr/local/go/bin
-                    cd campgrounds-go
-                    
-                    # Create artifacts directory
-                    mkdir -p artifacts
-                    
-                    # Build for different environments
-                    if [ "${DEPLOY_ENV}" = "prod" ]; then
-                        echo "Building production artifacts..."
-                        CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o artifacts/campgrounds-go-prod main.go
+                withCredentials([
+                    string(credentialsId: 'SESSION_SECRET_DEV', variable: 'DEV_SESSION_SECRET'),
+                    string(credentialsId: 'SESSION_SECRET_PROD', variable: 'PROD_SESSION_SECRET'),
+                    string(credentialsId: 'MONGODB_URI_DEV', variable: 'DEV_MONGODB_URI'),
+                    string(credentialsId: 'MONGODB_URI_PROD', variable: 'PROD_MONGODB_URI')
+                ]) {
+                    sh '''
+                        export PATH=$PATH:/usr/local/go/bin
+                        cd campgrounds-go
                         
-                        # Create production config
-                        cat > artifacts/.env.prod << EOF
+                        # Create artifacts directory
+                        mkdir -p artifacts
+                        
+                        # Build for different environments
+                        if [ "${DEPLOY_ENV}" = "prod" ]; then
+                            echo "Building production artifacts..."
+                            CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o artifacts/campgrounds-go-prod main.go
+                            
+                            # Create production config
+                            cat > artifacts/.env.prod << EOF
 PORT=${PROD_PORT}
 GIN_MODE=release
-MONGODB_URI=${MONGODB_URI}_prod
+MONGODB_URI=${PROD_MONGODB_URI}
 AWS_REGION=${AWS_DEFAULT_REGION}
 AWS_S3_BUCKET=${AWS_S3_BUCKET}
-SESSION_SECRET=${SESSION_SECRET}
+SESSION_SECRET=${PROD_SESSION_SECRET}
 EOF
-                    else
-                        echo "Building development artifacts..."
-                        CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o artifacts/campgrounds-go-dev main.go
-                        
-                        # Create development config
-                        cat > artifacts/.env.dev << EOF
+                            echo "Production environment file created"
+                        else
+                            echo "Building development artifacts..."
+                            CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o artifacts/campgrounds-go-dev main.go
+                            
+                            # Create development config
+                            cat > artifacts/.env.dev << EOF
 PORT=${DEV_PORT}
 GIN_MODE=debug
-MONGODB_URI=${MONGODB_URI}_dev
+MONGODB_URI=${DEV_MONGODB_URI}
 AWS_REGION=${AWS_DEFAULT_REGION}
 AWS_S3_BUCKET=${AWS_S3_BUCKET}
-SESSION_SECRET=${SESSION_SECRET}
+SESSION_SECRET=${DEV_SESSION_SECRET}
 EOF
-                    fi
-                    
-                    # Create deployment script
-                    cat > artifacts/deploy.sh << 'EOF'
+                            echo "Development environment file created"
+                        fi
+                        
+                        # Create deployment script
+                        cat > artifacts/deploy.sh << 'EOF'
 #!/bin/bash
 ENV=${1:-dev}
 echo "Deploying to $ENV environment..."
 
+# Load environment variables
+if [ -f ".env.$ENV" ]; then
+    export $(cat .env.$ENV | grep -v '^#' | xargs)
+    echo "Loaded environment variables for $ENV"
+else
+    echo "Warning: .env.$ENV file not found"
+fi
+
 # Stop existing process
 pkill -f campgrounds-go-$ENV || echo "No existing process found"
 
+# Wait a moment for process to stop
+sleep 2
+
 # Start new process
 if [ "$ENV" = "prod" ]; then
+    echo "Starting production server on port $PORT..."
     nohup ./campgrounds-go-prod > campgrounds-prod.log 2>&1 &
-    echo "Production server started on port 3000"
+    PROCESS_PID=$!
+    echo "Production server started with PID: $PROCESS_PID"
 else
+    echo "Starting development server on port $PORT..."
     nohup ./campgrounds-go-dev > campgrounds-dev.log 2>&1 &
-    echo "Development server started on port 3001"
+    PROCESS_PID=$!
+    echo "Development server started with PID: $PROCESS_PID"
+fi
+
+# Wait a moment and check if process is running
+sleep 3
+if ps -p $PROCESS_PID > /dev/null; then
+    echo "✅ Deployment successful! Server is running on port $PORT"
+else
+    echo "❌ Deployment failed! Server is not running"
+    exit 1
 fi
 
 echo "Deployment completed!"
 EOF
-                    
-                    chmod +x artifacts/deploy.sh
-                    
-                    # Create archive
-                    tar -czf campgrounds-go-${DEPLOY_ENV}-${BUILD_NUMBER}.tar.gz -C artifacts .
-                    
-                    echo "Artifacts created successfully!"
-                    ls -la artifacts/
-                    ls -la *.tar.gz
-                '''
+                        
+                        chmod +x artifacts/deploy.sh
+                        
+                        # Create health check script
+                        cat > artifacts/health-check.sh << 'EOF'
+#!/bin/bash
+ENV=${1:-dev}
+PORT=${2:-3001}
+
+if [ "$ENV" = "prod" ]; then
+    PORT=3000
+fi
+
+echo "Performing health check on port $PORT..."
+
+# Wait for server to start
+sleep 5
+
+# Perform health check
+RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:$PORT/health)
+
+if [ "$RESPONSE" = "200" ]; then
+    echo "✅ Health check passed! Server is healthy on port $PORT"
+    curl -s http://localhost:$PORT/health | jq '.' || echo "Health check response received"
+    exit 0
+else
+    echo "❌ Health check failed! HTTP status: $RESPONSE"
+    echo "Server logs:"
+    if [ "$ENV" = "prod" ]; then
+        tail -20 campgrounds-prod.log || echo "No log file found"
+    else
+        tail -20 campgrounds-dev.log || echo "No log file found"
+    fi
+    exit 1
+fi
+EOF
+                        
+                        chmod +x artifacts/health-check.sh
+                        
+                        # Create archive
+                        tar -czf campgrounds-go-${DEPLOY_ENV}-${BUILD_NUMBER}.tar.gz -C artifacts .
+                        
+                        echo "Artifacts created successfully!"
+                        ls -la artifacts/
+                        ls -la *.tar.gz
+                    '''
+                }
             }
         }
         
@@ -266,17 +348,22 @@ EOF
                         cd campgrounds-go
                         
                         # Upload artifacts to S3
+                        echo "Uploading campgrounds-go-${DEPLOY_ENV}-${BUILD_NUMBER}.tar.gz to S3..."
                         aws s3 cp campgrounds-go-${DEPLOY_ENV}-${BUILD_NUMBER}.tar.gz \
-                            s3://${AWS_S3_BUCKET}/artifacts/${DEPLOY_ENV}/campgrounds-go-${BUILD_NUMBER}.tar.gz
+                            s3://${AWS_S3_BUCKET}/artifacts/${DEPLOY_ENV}/campgrounds-go-${BUILD_NUMBER}.tar.gz \
+                            --metadata "build-number=${BUILD_NUMBER},environment=${DEPLOY_ENV},timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
                         
                         # Upload latest version
+                        echo "Uploading latest version..."
                         aws s3 cp campgrounds-go-${DEPLOY_ENV}-${BUILD_NUMBER}.tar.gz \
-                            s3://${AWS_S3_BUCKET}/artifacts/${DEPLOY_ENV}/campgrounds-go-latest.tar.gz
+                            s3://${AWS_S3_BUCKET}/artifacts/${DEPLOY_ENV}/campgrounds-go-latest.tar.gz \
+                            --metadata "build-number=${BUILD_NUMBER},environment=${DEPLOY_ENV},timestamp=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
                         
-                        echo "Artifacts uploaded to S3 successfully!"
+                        echo "✅ Artifacts uploaded to S3 successfully!"
                         
                         # List uploaded files
-                        aws s3 ls s3://${AWS_S3_BUCKET}/artifacts/${DEPLOY_ENV}/
+                        echo "Files in S3 bucket:"
+                        aws s3 ls s3://${AWS_S3_BUCKET}/artifacts/${DEPLOY_ENV}/ --human-readable
                     '''
                 }
             }
@@ -300,21 +387,29 @@ EOF
                     cd campgrounds-go
                     
                     # Create deployment directory
-                    mkdir -p /tmp/campgrounds-dev/
+                    sudo mkdir -p /opt/campgrounds-dev/
+                    sudo chown jenkins:jenkins /opt/campgrounds-dev/
                     
                     # Extract artifacts
-                    tar -xzf campgrounds-go-dev-${BUILD_NUMBER}.tar.gz -C /tmp/campgrounds-dev/
+                    tar -xzf campgrounds-go-dev-${BUILD_NUMBER}.tar.gz -C /opt/campgrounds-dev/
                     
                     # Deploy to development
-                    cd /tmp/campgrounds-dev/
+                    cd /opt/campgrounds-dev/
                     ./deploy.sh dev
                     
                     # Health check
-                    sleep 5
-                    curl -f http://localhost:${DEV_PORT}/health || echo "Health check failed, but continuing..."
+                    ./health-check.sh dev
                     
-                    echo "Development deployment completed!"
+                    echo "✅ Development deployment completed successfully!"
                 '''
+            }
+            post {
+                success {
+                    echo '✅ Development deployment successful!'
+                }
+                failure {
+                    echo '❌ Development deployment failed!'
+                }
             }
         }
         
@@ -327,27 +422,55 @@ EOF
             }
             steps {
                 echo 'Deploying to Production environment...'
-                input message: 'Deploy to Production?', ok: 'Deploy'
+                
+                // Manual approval for production
+                script {
+                    def deployApproval = input(
+                        message: 'Deploy to Production?',
+                        ok: 'Deploy',
+                        parameters: [
+                            booleanParam(
+                                name: 'CONFIRM_DEPLOYMENT',
+                                defaultValue: false,
+                                description: 'Check this box to confirm production deployment'
+                            )
+                        ]
+                    )
+                    
+                    if (!deployApproval) {
+                        error('Production deployment cancelled by user')
+                    }
+                }
                 
                 sh '''
                     cd campgrounds-go
                     
                     # Create deployment directory
-                    mkdir -p /tmp/campgrounds-prod/
+                    sudo mkdir -p /opt/campgrounds-prod/
+                    sudo chown jenkins:jenkins /opt/campgrounds-prod/
                     
                     # Extract artifacts
-                    tar -xzf campgrounds-go-prod-${BUILD_NUMBER}.tar.gz -C /tmp/campgrounds-prod/
+                    tar -xzf campgrounds-go-prod-${BUILD_NUMBER}.tar.gz -C /opt/campgrounds-prod/
                     
                     # Deploy to production
-                    cd /tmp/campgrounds-prod/
+                    cd /opt/campgrounds-prod/
                     ./deploy.sh prod
                     
                     # Health check
-                    sleep 5
-                    curl -f http://localhost:${PROD_PORT}/health || echo "Health check failed, but continuing..."
+                    ./health-check.sh prod
                     
-                    echo "Production deployment completed!"
+                    echo "✅ Production deployment completed successfully!"
                 '''
+            }
+            post {
+                success {
+                    echo '✅ Production deployment successful!'
+                    // Add notifications here (email, Slack, etc.)
+                }
+                failure {
+                    echo '❌ Production deployment failed!'
+                    // Add failure notifications here
+                }
             }
         }
     }
@@ -364,15 +487,17 @@ EOF
         }
         
         success {
-            echo 'Pipeline succeeded!'
+            echo '✅ Pipeline succeeded!'
+            // Add success notifications here
         }
         
         failure {
-            echo 'Pipeline failed!'
+            echo '❌ Pipeline failed!'
+            // Add failure notifications here
         }
         
         unstable {
-            echo 'Pipeline is unstable!'
+            echo '⚠️ Pipeline is unstable!'
         }
     }
 }

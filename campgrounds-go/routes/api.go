@@ -6,7 +6,6 @@ import (
 	"yelpcamp-go/middleware"
 )
 
-func SetupAPIRoutes(r *gin.Engine) {
 	// Initialize controllers
 	authController := controllers.NewAuthController()
 	campgroundController := controllers.NewCampgroundController()
@@ -58,4 +57,3 @@ func SetupAPIRoutes(r *gin.Engine) {
 			})
 		}
 	}
-}

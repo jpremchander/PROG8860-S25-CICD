@@ -11,6 +11,7 @@ import (
 	"yelpcamp-go/models"
 )
 
+// SetupRoutes is the main function to setup all routes
 func SetupRoutes(r *gin.Engine) {
 	// Initialize controllers
 	authController := controllers.NewAuthController()
@@ -22,18 +23,17 @@ func SetupRoutes(r *gin.Engine) {
 		c.JSON(200, gin.H{
 			"status":    "ok",
 			"message":   "YelpCamp Go API is running",
-			"timestamp": "2024-06-19",
+			"timestamp": "2024-06-21",
 			"version":   "1.0.0",
 		})
 	})
 
-	// Web Routes (HTML pages)
+	// Setup web and API routes
 	setupWebRoutes(r, authController, campgroundController, reviewController)
-	
-	// API Routes (JSON responses)
 	setupAPIRoutes(r)
 }
 
+// setupWebRoutes handles all web (HTML) routes
 func setupWebRoutes(r *gin.Engine, authController *controllers.AuthController, campgroundController *controllers.CampgroundController, reviewController *controllers.ReviewController) {
 	// Apply optional auth to all web routes to check if user is logged in
 	r.Use(middleware.WebAuthOptional())
@@ -99,97 +99,8 @@ func setupWebRoutes(r *gin.Engine, authController *controllers.AuthController, c
 		})
 	})
 
-	// New campground form (protected)
-	r.GET("/campgrounds/new", middleware.WebAuthRequired(), func(c *gin.Context) {
-		c.HTML(http.StatusOK, "new.html", gin.H{
-			"title":         "Add New Campground",
-			"authenticated": true,
-		})
-	})
-
-	// Create campground (protected)
-	r.POST("/campgrounds", middleware.WebAuthRequired(), campgroundController.CreateWeb)
-
-	// Edit campground form (protected)
-	r.GET("/campgrounds/:id/edit", middleware.WebAuthRequired(), func(c *gin.Context) {
-		idParam := c.Param("id")
-		id, err := primitive.ObjectIDFromHex(idParam)
-		if err != nil {
-			c.HTML(http.StatusBadRequest, "error.html", gin.H{
-				"title": "Error",
-				"error": "Invalid campground ID",
-			})
-			return
-		}
-
-		db := config.GetDB()
-		campground, err := models.FindCampgroundByID(db, id)
-		if err != nil {
-			c.HTML(http.StatusNotFound, "error.html", gin.H{
-				"title": "Error",
-				"error": "Campground not found",
-			})
-			return
-		}
-
-		// Check if user owns this campground
-		userID := c.MustGet("user_id").(primitive.ObjectID)
-		if campground.AuthorID != userID {
-			c.HTML(http.StatusForbidden, "error.html", gin.H{
-				"title": "Error",
-				"error": "Not authorized to edit this campground",
-			})
-			return
-		}
-
-		c.HTML(http.StatusOK, "edit.html", gin.H{
-			"title":         "Edit Campground",
-			"campground":    campground,
-			"authenticated": true,
-		})
-	})
-
-	// Update campground (protected)
-	r.PUT("/campgrounds/:id", middleware.WebAuthRequired(), campgroundController.UpdateWeb)
-
-	// Delete campground (protected)
-	r.DELETE("/campgrounds/:id", middleware.WebAuthRequired(), campgroundController.DeleteWeb)
-
-	// User profile
-	r.GET("/users/:id", func(c *gin.Context) {
-		idParam := c.Param("id")
-		id, err := primitive.ObjectIDFromHex(idParam)
-		if err != nil {
-			c.HTML(http.StatusBadRequest, "error.html", gin.H{
-				"title": "Error",
-				"error": "Invalid user ID",
-			})
-			return
-		}
-
-		db := config.GetDB()
-		user, err := models.FindUserByID(db, id)
-		if err != nil {
-			c.HTML(http.StatusNotFound, "error.html", gin.H{
-				"title": "Error",
-				"error": "User not found",
-			})
-			return
-		}
-
-		campgrounds, _ := models.FindCampgroundsByAuthor(db, id)
-
-		c.HTML(http.StatusOK, "profile.html", gin.H{
-			"title":         "User Profile",
-			"user":          user,
-			"campgrounds":   campgrounds,
-			"authenticated": c.GetBool("authenticated"),
-		})
-	})
-
-	// Authentication pages
+	// Authentication pages and actions
 	r.GET("/register", func(c *gin.Context) {
-		// Redirect if already logged in
 		if c.GetBool("authenticated") {
 			c.Redirect(http.StatusSeeOther, "/campgrounds")
 			return
@@ -200,7 +111,6 @@ func setupWebRoutes(r *gin.Engine, authController *controllers.AuthController, c
 	})
 
 	r.GET("/login", func(c *gin.Context) {
-		// Redirect if already logged in
 		if c.GetBool("authenticated") {
 			c.Redirect(http.StatusSeeOther, "/campgrounds")
 			return
@@ -216,13 +126,20 @@ func setupWebRoutes(r *gin.Engine, authController *controllers.AuthController, c
 	r.GET("/logout", authController.Logout)
 	r.POST("/logout", authController.Logout)
 
-	// Review actions (protected)
+	// Protected routes
+	r.GET("/campgrounds/new", middleware.WebAuthRequired(), func(c *gin.Context) {
+		c.HTML(http.StatusOK, "new.html", gin.H{
+			"title":         "Add New Campground",
+			"authenticated": true,
+		})
+	})
+
+	r.POST("/campgrounds", middleware.WebAuthRequired(), campgroundController.CreateWeb)
 	r.POST("/campgrounds/:id/reviews", middleware.WebAuthRequired(), reviewController.CreateWeb)
-	r.DELETE("/campgrounds/:id/reviews/:reviewId", middleware.WebAuthRequired(), reviewController.DeleteWeb)
 }
 
+// setupAPIRoutes handles all API (JSON) routes
 func setupAPIRoutes(r *gin.Engine) {
-	// API routes
 	api := r.Group("/api")
 	{
 		// Health check
@@ -230,7 +147,7 @@ func setupAPIRoutes(r *gin.Engine) {
 			c.JSON(200, gin.H{
 				"status":    "ok",
 				"message":   "YelpCamp Go API is running",
-				"timestamp": "2024-06-19",
+				"timestamp": "2024-06-21",
 				"version":   "1.0.0",
 			})
 		})
@@ -240,7 +157,7 @@ func setupAPIRoutes(r *gin.Engine) {
 			c.JSON(200, gin.H{
 				"message": "Test endpoint working",
 				"data": gin.H{
-					"server_time": "2024-06-19T10:00:00Z",
+					"server_time": "2024-06-21T12:00:00Z",
 					"endpoints": []string{
 						"/api/health",
 						"/api/campgrounds",
@@ -302,17 +219,6 @@ func setupAPIRoutes(r *gin.Engine) {
 			campgrounds.POST("", middleware.AuthRequired(), controllers.NewCampgroundController().Create)
 			campgrounds.PUT("/:id", middleware.AuthRequired(), controllers.NewCampgroundController().Update)
 			campgrounds.DELETE("/:id", middleware.AuthRequired(), controllers.NewCampgroundController().Delete)
-			campgrounds.POST("/:id/images", middleware.AuthRequired(), controllers.NewCampgroundController().UploadImages)
 		}
 	}
-}
-
-// SetupWebRoutes sets up web routes
-func SetupWebRoutes(r *gin.Engine, authController *controllers.AuthController, campgroundController *controllers.CampgroundController, reviewController *controllers.ReviewController) {
-	setupWebRoutes(r, authController, campgroundController, reviewController)
-}
-
-// SetupAPIRoutes sets up API routes
-func SetupAPIRoutes(r *gin.Engine) {
-	setupAPIRoutes(r)
 }

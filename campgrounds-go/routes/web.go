@@ -11,7 +11,6 @@ import (
 	"yelpcamp-go/models"
 )
 
-func SetupWebRoutes(r *gin.Engine, authController *controllers.AuthController, campgroundController *controllers.CampgroundController, reviewController *controllers.ReviewController) {
 	// Homepage
 	r.GET("/", func(c *gin.Context) {
 		c.HTML(http.StatusOK, "index.html", gin.H{
@@ -187,4 +186,3 @@ func SetupWebRoutes(r *gin.Engine, authController *controllers.AuthController, c
 	// Review actions (protected)
 	r.POST("/campgrounds/:id/reviews", middleware.WebAuthRequired(), reviewController.CreateWeb)
 	r.DELETE("/campgrounds/:id/reviews/:reviewId", middleware.WebAuthRequired(), reviewController.DeleteWeb)
-}

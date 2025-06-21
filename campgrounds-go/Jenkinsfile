@@ -76,66 +76,58 @@ pipeline {
         stage('Build') {
             steps {
                 echo 'Building the application...'
-                withCredentials([string(credentialsId: 'GITHUB-PAT', variable: 'GITHUB_TOKEN')]) {
-                    sh '''
-                        export PATH=$PATH:/usr/local/go/bin
-                        export GOPATH=$WORKSPACE/go
-                        
-                        # Configure Git to use the PAT for GitHub access
-                        git config --global url."https://${GITHUB_TOKEN}@github.com/".insteadOf "https://github.com/"
-                        
-                        # Set Go module proxy settings
-                        export GOPROXY=https://proxy.golang.org,direct
-                        export GOSUMDB=sum.golang.org
-                        export GONOPROXY=""
-                        export GONOSUMDB=""
-                        export GOPRIVATE=""
-                        
-                        # Navigate to the Go project directory
-                        cd campgrounds-go
-                        
-                        # Clean any existing modules and cache
-                        rm -f go.sum
-                        go clean -modcache || true
-                        
-                        # Download dependencies with retry logic
-                        echo "Downloading Go dependencies..."
-                        for i in {1..3}; do
-                            if go mod download; then
-                                echo "✅ Dependencies downloaded successfully on attempt $i"
-                                break
-                            else
-                                echo "❌ Attempt $i failed, retrying in 2 seconds..."
-                                sleep 2
-                                if [ $i -eq 3 ]; then
-                                    echo "❌ Failed to download dependencies after 3 attempts"
-                                    exit 1
-                                fi
+                sh '''
+                    export PATH=$PATH:/usr/local/go/bin
+                    export GOPATH=$WORKSPACE/go
+                    
+                    # Set Go module proxy settings to avoid Git authentication
+                    export GOPROXY=https://proxy.golang.org,direct
+                    export GOSUMDB=sum.golang.org
+                    export GONOPROXY=""
+                    export GONOSUMDB=""
+                    export GOPRIVATE=""
+                    
+                    # Navigate to the Go project directory
+                    cd campgrounds-go
+                    
+                    # Clean any existing modules and cache
+                    rm -f go.sum
+                    go clean -modcache || true
+                    
+                    # Download dependencies with retry logic
+                    echo "Downloading Go dependencies..."
+                    for i in {1..3}; do
+                        if go mod download; then
+                            echo "✅ Dependencies downloaded successfully on attempt $i"
+                            break
+                        else
+                            echo "❌ Attempt $i failed, retrying in 2 seconds..."
+                            sleep 2
+                            if [ $i -eq 3 ]; then
+                                echo "❌ Failed to download dependencies after 3 attempts"
+                                exit 1
                             fi
-                        done
-                        
-                        # Verify modules
-                        go mod verify
-                        echo "✅ Module verification completed"
-                        
-                        # Build the application
-                        echo "Building application..."
-                        CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o campgrounds-go main.go
-                        
-                        # Verify build
-                        if [ ! -f campgrounds-go ]; then
-                            echo "❌ Build failed: executable not found"
-                            exit 1
                         fi
-                        
-                        echo "✅ Build successful!"
-                        ls -la campgrounds-go
-                        file campgrounds-go
-                        
-                        # Clean up Git configuration for security
-                        git config --global --unset url."https://${GITHUB_TOKEN}@github.com/".insteadOf || true
-                    '''
-                }
+                    done
+                    
+                    # Verify modules
+                    go mod verify
+                    echo "✅ Module verification completed"
+                    
+                    # Build the application
+                    echo "Building application..."
+                    CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o campgrounds-go main.go
+                    
+                    # Verify build
+                    if [ ! -f campgrounds-go ]; then
+                        echo "❌ Build failed: executable not found"
+                        exit 1
+                    fi
+                    
+                    echo "✅ Build successful!"
+                    ls -la campgrounds-go
+                    file campgrounds-go
+                '''
             }
             post {
                 success {
@@ -525,11 +517,9 @@ EOF
                     echo '✅ Production deployment successful!'
                     echo '🌟 Prod server: http://localhost:3000'
                     echo '🏥 Health check: http://localhost:3000/health'
-                    // Add notifications here (email, Slack, etc.)
                 }
                 failure {
                     echo '❌ Production deployment failed!'
-                    // Add failure notifications here
                 }
             }
         }

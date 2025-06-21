@@ -22,6 +22,8 @@ func setupRouter() *gin.Engine {
 	{
 		api.GET("/campgrounds", getCampgrounds)
 		api.POST("/campgrounds", createCampground)
+		api.PUT("/campgrounds/:id", updateCampground)
+		api.DELETE("/campgrounds/:id", deleteCampground)
 	}
 	
 	return r
@@ -67,5 +69,64 @@ func TestCreateCampground(t *testing.T) {
 
 	if w.Code != 201 {
 		t.Errorf("Expected 201, got %d", w.Code)
+	}
+}
+
+// 🆕 4TH TEST - Update Campground
+func TestUpdateCampground(t *testing.T) {
+	router := setupRouter()
+	
+	// Test updating an existing campground (ID 1 exists in sample data)
+	updateData := map[string]interface{}{
+		"title":       "Updated Test Camp",
+		"description": "Updated Description",
+		"location":    "Updated Location",
+		"price":       35.99,
+	}
+	
+	jsonData, _ := json.Marshal(updateData)
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("PUT", "/api/campgrounds/1", bytes.NewBuffer(jsonData))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Errorf("Expected 200, got %d", w.Code)
+	}
+	
+	// Verify response contains updated data
+	var response map[string]interface{}
+	json.Unmarshal(w.Body.Bytes(), &response)
+	
+	if campground, ok := response["campground"].(map[string]interface{}); ok {
+		if title, ok := campground["title"].(string); ok && title != "Updated Test Camp" {
+			t.Errorf("Expected title to be 'Updated Test Camp', got %s", title)
+		}
+	}
+}
+
+// 🆕 BONUS 5TH TEST - Delete Campground
+func TestDeleteCampground(t *testing.T) {
+	router := setupRouter()
+	
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("DELETE", "/api/campgrounds/1", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != 200 {
+		t.Errorf("Expected 200, got %d", w.Code)
+	}
+}
+
+// 🆕 BONUS 6TH TEST - Invalid Campground ID
+func TestInvalidCampgroundID(t *testing.T) {
+	router := setupRouter()
+	
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/api/campgrounds/invalid", nil)
+	router.ServeHTTP(w, req)
+
+	if w.Code != 400 {
+		t.Errorf("Expected 400 for invalid ID, got %d", w.Code)
 	}
 }

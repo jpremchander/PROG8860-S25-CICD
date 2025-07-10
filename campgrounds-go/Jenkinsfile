@@ -16,23 +16,7 @@ pipeline {
             choices: ['dev', 'prod', 'both'],
             description: 'Select deployment environment'
         )
-        booleanParam(
-            name: 'SKIP_TESTS',
-            defaultValue: false,
-            description: 'Skip running tests'
-        )
-        booleanParam(
-            name: 'REBUILD_IMAGES',
-            defaultValue: true,
-            description: 'Force rebuild Docker images'
-        )
-    }
-    
-    options {
-        buildDiscarder(logRotator(numToKeepStr: '10'))
-        timeout(time: 45, unit: 'MINUTES')
-        timestamps()
-    }
+        }
     
     stages {
         stage('🧹 Clean Workspace') {

@@ -1,4 +1,4 @@
-# YelpCamp Go - CI/CD Pipeline Project
+# YelpCamp Go - CI/CD Pipeline Project - Midterm
 
 **A Full-Stack Campground Review Platform with Complete CI/CD Pipeline**
 

@@ -1,58 +1,145 @@
+# 🛠️ PROG8860 Assignment – CI/CD Pipeline with AWS CDK
 
-# Welcome to your CDK Python project!!!
+## 📌 Student Details
 
-This is a blank project for CDK development with Python.
+- **Name:** Premchander J
+- **Student ID:** 9015480
+- **Course:** PROG8860 – CI/CD
+- **Submission Date:** 13-July-2025
 
-The `cdk.json` file tells the CDK Toolkit how to execute your app.
+---
 
-This project is set up like a standard Python project.  The initialization
-process also creates a virtualenv within this project, stored under the `.venv`
-directory.  To create the virtualenv it assumes that there is a `python3`
-(or `python` for Windows) executable in your path with access to the `venv`
-package. If for any reason the automatic creation of the virtualenv fails,
-you can create the virtualenv manually.
+## 📦 Project Overview
 
-To manually create a virtualenv on MacOS and Linux:
+This project demonstrates a complete CI/CD pipeline using **AWS CDK** to deploy a simple serverless application. The application consists of:
 
-```
-$ python3 -m venv .venv
-```
+- ✅ **AWS Lambda Function** – Handles requests with a basic Python handler
+- ✅ **Amazon S3 Bucket** – Storage for any assets or files
+- ✅ **Amazon DynamoDB Table** – Stores data with a primary key `id`
+- ✅ **CodePipeline + CodeBuild** – Automatically deploys the infrastructure from GitHub on push
 
-After the init process completes and the virtualenv is created, you can use the following
-step to activate your virtualenv.
+---
 
-```
-$ source .venv/bin/activate
-```
+## 🚀 Tech Stack
 
-If you are a Windows platform, you would activate the virtualenv like this:
+| Layer          | Tool/Service        |
+|----------------|---------------------|
+| Version Control | GitHub              |
+| CI/CD Pipeline | AWS CodePipeline     |
+| Build Tool     | AWS CodeBuild        |
+| IaC            | AWS CDK (Python)     |
+| Cloud Services | AWS Lambda, S3, DynamoDB, IAM |
 
-```
-% .venv\Scripts\activate.bat
-```
+---
 
-Once the virtualenv is activated, you can install the required dependencies.
+## 📂 Project Structure
 
-```
-$ pip install -r requirements.txt
-```
+PROG8860-S25-CICD/
+│
+├── app.py # Entry point (Lambda function)
+├── buildspec.yml # CodeBuild instructions
+├── requirements.txt # CDK dependencies
+├── cdk.json # CDK app configuration
+├── cdk_project_9015480/ # CDK Stack code
+│ ├── cdk_project_9015480_stack.py
+│ ├── init.py
+│ ├── README.md
+│ ├── requirements-dev.txt
+│ ├── source.bat
+│ └── tests/
+└── .venv/ # (optional) Local virtual environment
 
-At this point you can now synthesize the CloudFormation template for this code.
+yaml
+Copy
+Edit
 
-```
-$ cdk synth
-```
+---
 
-To add additional dependencies, for example other CDK libraries, just add
-them to your `setup.py` file and rerun the `pip install -r requirements.txt`
-command.
+## ⚙️ How It Works
 
-## Useful commands
+### ✅ Step 1: GitHub Push
 
- * `cdk ls`          list all stacks in the app
- * `cdk synth`       emits the synthesized CloudFormation template
- * `cdk deploy`      deploy this stack to your default AWS account/region
- * `cdk diff`        compare deployed stack with current state
- * `cdk docs`        open CDK documentation
+Whenever you push to the GitHub repository, it triggers:
 
-Enjoy!
+### ✅ Step 2: AWS CodePipeline
+
+- Pulls source from GitHub
+- Runs **AWS CodeBuild** using `buildspec.yml`
+
+### ✅ Step 3: CodeBuild
+
+- Installs CDK and Python dependencies
+- Runs `cdk synth` and `cdk deploy`
+- Provisions:
+  - Lambda
+  - S3 bucket
+  - DynamoDB table
+
+---
+
+## 🖥️ Screenshots (Add Your Own)
+
+> 📸 Please insert the following screenshots below:
+
+1. **Cloudformation Stack**
+   > ![alt text](image.png)
+
+2. **AWS CodePipeline Execution**
+   > ![alt text](image-1.png)
+
+3. **CodeBuild Log Output (Success)**
+   > ![alt text](image-2.png)
+   > ![alt text](image-3.png)
+   > ![alt text](image-4.png)
+   > ![alt text](image-5.png)
+   > ![alt text](image-6.png)
+   > ![alt text](image-7.png)
+
+4. **AWS Lambda Console**
+   > ![alt text](image-8.png)
+
+5. **DynamoDB Table**
+   > ![alt text](image-9.png)
+
+6. **S3 Bucket**
+   > ![alt text](image-10.png)
+
+---
+
+## ✅ CDK Stack Summary
+
+The following AWS resources were deployed via CDK:
+
+| Resource         | Type           | Notes |
+|------------------|----------------|-------|
+| `LambdaFunction` | AWS::Lambda::Function | Prints "Hello from 9015480!" |
+| `S3Bucket`       | AWS::S3::Bucket        | Versioning enabled |
+| `DynamoDBTable`  | AWS::DynamoDB::Table   | With `id` as primary key |
+| `IAM Role`       | AWS::IAM::Role         | Lambda execution role |
+| `Log Group`      | AWS::Logs::LogGroup    | For Lambda logs |
+
+---
+
+## 💵 Cost Optimization
+
+This project runs entirely within **AWS Free Tier**:
+- ✅ Lambda: < 1 million requests/month
+- ✅ S3: < 5 GB storage
+- ✅ DynamoDB: Up to 25 RCUs/WCUs
+- ✅ CodePipeline + CodeBuild: Free for 1,000 minutes/month
+
+---
+
+## 🔐 Security Note
+
+- Environment is bootstrapped using `cdk bootstrap`
+- Least privilege IAM roles used for Lambda
+- All resources deleted after testing to prevent charges
+
+---
+
+## 📎 References
+
+- [AWS CDK Docs](https://docs.aws.amazon.com/cdk/latest/guide/home.html)
+- [AWS Free Tier](https://aws.amazon.com/free)
+- [AWS CodePipeline](https://docs.aws.amazon.com/codepipeline/latest/userguide/welcome.html)

@@ -130,7 +130,7 @@ This project runs entirely within **AWS Free Tier**:
 
 ---
 
-## 🔐 Security Note
+## 🔐 Security Notes
 
 - Environment is bootstrapped using `cdk bootstrap`
 - Least privilege IAM roles used for Lambda

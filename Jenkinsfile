@@ -6,7 +6,7 @@ pipeline {
 
     agent any
 
-    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'AWSCREDENTIALS']]) {
+    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'INVOXA_AWS_CREDENTIALS']]) {
 
     }
 

@@ -2,11 +2,13 @@ import groovy.util.Node
 
 // Jenkinsfile for Invoxa project
 
-@copilot can you help me to write a Jenkinsfile to deploy the Terraform code in the invoxa/terraform directory in aws
-
 pipeline {
 
    agent any
+   environment {
+       // Define environment variables if needed
+       INVOXA_AWS_CREDENTIALS = credentials('INVOXA_AWS_CREDENTIALS') // Jenkins credentials ID for AWS
+   }
 
    stages {
 

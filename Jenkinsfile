@@ -6,8 +6,12 @@ pipeline {
 
     agent any
 
-    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'INVOXA_AWS_CREDENTIALS']]) {
-
+    withCredentials([[
+        $class: 'AmazonWebServicesCredentialsBinding', 
+        credentialsId: 'INVOXA_AWS_CREDENTIALS'
+    ]]) {
+        // Inside this block, AWS credentials are injected as environment variables
+        sh 'aws sts get-caller-identity'
     }
 
     stages {

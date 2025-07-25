@@ -5,9 +5,9 @@ import groovy.util.Node
 pipeline {
 
     agent any
-    environment {
-        AWS_ACCESS_KEY_ID = credentials('AWSCREDENTIALS')?.AccessKeyId
-        AWS_SECRET_ACCESS_KEY = credentials('AWSCREDENTIALS')?.SecretAccessKey
+
+    withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'AWSCREDENTIALS']]) {
+
     }
 
     stages {

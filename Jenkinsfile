@@ -6,8 +6,8 @@ pipeline {
 
     agent any
     environment {
-        // Define environment variables if needed
-        INVOXA_AWS_CREDENTIALS = credentials('INVOXA_AWS_CREDENTIALS') // Jenkins credentials ID for AWS
+        AWS_ACCESS_KEY_ID = credentials('AWSCREDENTIALS')?.ACCESS_KEY_ID
+        AWS_SECRET_ACCESS_KEY = credentials('AWSCREDENTIALS')?.SECRET_ACCESS_KEY
     }
 
     stages {

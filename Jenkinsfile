@@ -6,13 +6,21 @@ pipeline {
 
     agent any
 
-    withCredentials([[
-        $class: 'AmazonWebServicesCredentialsBinding',
-        credentialsId: 'INVOXA_AWS_CREDENTIALS',
-        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-    ]]) {
-        sh 'aws sts get-caller-identity'
+    stages {
+        stage('Invoxa AWS Credentials') {
+            steps {
+                script {
+                    withCredentials([[
+                        $class: 'AmazonWebServicesCredentialsBinding',
+                        credentialsId: 'INVOXA_AWS_CREDENTIALS',
+                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
+                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
+                    ]]) {
+                        sh 'aws sts get-caller-identity'
+                    }
+                }
+            }
+        }
     }
 
     stages {

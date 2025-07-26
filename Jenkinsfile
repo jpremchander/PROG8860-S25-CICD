@@ -3,6 +3,21 @@ import groovy.util.Node
 // Jenkinsfile for Invoxa project
 
 pipeline {
+    agent any
+    
+    stages {
+        stage('Test AWS') {
+            steps {
+                withAWS(credentials: 'INVOXA_AWS_CREDENTIALS', region: 'us-east-1') {
+                    sh 'aws sts get-caller-identity'
+                }
+            }
+        }
+    }
+}
+
+/*
+pipeline {
 
     agent any
 
@@ -22,6 +37,7 @@ pipeline {
             }
         }
     }
+*/    
 
     stages {
 

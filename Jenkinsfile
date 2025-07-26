@@ -1,7 +1,5 @@
 import groovy.util.Node
 
-// Jenkinsfile for Invoxa project
-
 pipeline {
     agent any
     
@@ -13,33 +11,6 @@ pipeline {
                 }
             }
         }
-    }
-}
-
-/*
-pipeline {
-
-    agent any
-
-    stages {
-        stage('Invoxa AWS Credentials') {
-            steps {
-                script {
-                    withCredentials([[
-                        $class: 'AmazonWebServicesCredentialsBinding',
-                        credentialsId: 'INVOXA_AWS_CREDENTIALS',
-                        accessKeyVariable: 'AWS_ACCESS_KEY_ID',
-                        secretKeyVariable: 'AWS_SECRET_ACCESS_KEY'
-                    ]]) {
-                        sh 'aws sts get-caller-identity'
-                    }
-                }
-            }
-        }
-    }
-*/    
-
-    stages {
 
         stage('Setup parameters') {
             steps {
@@ -184,7 +155,6 @@ pipeline {
         stage('Assume AWS Role') {
             steps {
                 script {
-                    // role assume
                     def assumeRole = { roleArn, sessionName ->
                         def assumeRoleOutput = sh(
                             script: """
@@ -202,7 +172,6 @@ pipeline {
                         ]
                     }
 
-                    // Assuming IAM Roles based On Organization Environment
                     if (params.InvoxaAccount == 'invoxa-dev') {
                         def role1 = assumeRole("arn:aws:iam::857736875915:role/RINX_DEVAWS_JENKINS_ADM", "jenkins-dev-adm-session")
                         env.AWS_ACCESS_KEY_ID = role1.accessKey
@@ -223,7 +192,6 @@ pipeline {
         stage('Terraform Init') {
             steps {
                 script {
-                    // Initialize Terraform
                     sh 'terraform init'
                     echo 'Terraform initialized successfully.'
                 }
@@ -263,7 +231,6 @@ pipeline {
         stage('Cleanup') {
             steps {
                 script {
-                    // Clean up Terraform state files
                     sh 'rm -f tfplan'
                     echo 'Terraform state files cleaned up.'
                 }
@@ -273,7 +240,6 @@ pipeline {
         stage('Post-Deployment') {
             steps {
                 script {
-                    // Post-deployment actions, e.g., notifying stakeholders
                     echo "Deployment completed successfully for ${params.Organization_Environment} environment."
                 }
             }
@@ -283,7 +249,6 @@ pipeline {
     post {
         always {
             script {
-                // Clean up AWS credentials
                 env.AWS_ACCESS_KEY_ID = ''
                 env.AWS_SECRET_ACCESS_KEY = ''
                 env.AWS_SESSION_TOKEN = ''

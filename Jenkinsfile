@@ -1,10 +1,22 @@
 pipeline {
     agent any
+
+    environment {
+        // Auto-set based on branch
+        TF_ENV = "${env.BRANCH_NAME == 'release' ? 'prd' : 'dev'}"
+        TF_VARS_FILE = "${TF_ENV}.tfvars"
+        TF_DIR = "terraform"
+    }
     
     stages {
         stage('Setup Parameters') {
             steps {
                 script {
+                    // Validate environment selection before setting parameters
+                    if (!params.Organization_Environment in ['dev', 'prd']) {
+                        error "Invalid environment selected: ${params.Organization_Environment}"
+                    }
+
                     properties([
                         parameters([
                             choice(
@@ -14,8 +26,8 @@ pipeline {
                             ),
                             string(
                                 name: 'InvoxaAccount',
-                                defaultValue: '',
-                                description: 'AWS Account (auto-populates to invoxa-dev/invoxa-prd)'
+                                defaultValue: params.Organization_Environment == 'dev' ? 'invoxa-dev' : 'invoxa-prd',
+                                description: 'AWS Account'
                             ),
                             string(
                                 name: 'InvoxaAccountNo',
@@ -28,7 +40,7 @@ pipeline {
                                 description: 'AWS Region'
                             ),
                             string(
-                                name: 'ITCHG',
+                                name: 'JIRA_TICKET',
                                 defaultValue: '',
                                 description: 'REQUIRED: Enter your change ticket number'
                             )
@@ -38,21 +50,15 @@ pipeline {
             }
         }
 
-        stage('Auto-configure') {
-            steps {
-                script {
-                    // Auto-set values based on environment selection
-                    params.InvoxaAccount = "invoxa-${params.Organization_Environment}"
-                    echo "✅ Auto-configured for ${params.InvoxaAccount}"
-                }
-            }
-        }
-
         stage('Validate Inputs') {
             steps {
-                script {
-                    if (!params.ITCHG?.trim()) {
-                        error "❌ Ticket number (ITCHG) is required"
+                script {                   
+                    // Cross-validate parameters
+                    if (params.Organization_Environment == 'dev' && params.InvoxaAccount != 'invoxa-dev') {
+                        error "Invalid account for dev environment"
+                    }
+                    if (params.Organization_Environment == 'prd' && params.InvoxaAccount != 'invoxa-prd') {
+                        error "Invalid account for prod environment"
                     }
                 }
             }
@@ -61,9 +67,7 @@ pipeline {
         stage('Assume AWS Role') {
             steps {
                 script {
-                    def roleArn = params.Organization_Environment == 'dev' ? 
-                        "arn:aws:iam::857736875915:role/RINX_DEVAWS_JENKINS_ADM" :
-                        "arn:aws:iam::857736875915:role/RINX_PRDAWS_JENKINS_ADM"
+                    def roleArn = "arn:aws:iam::857736875915:role/RINX_${params.Organization_Environment.toUpperCase()}AWS_JENKINS_ADM"
                     
                     def creds = sh(returnStdout: true, script: """
                         aws sts assume-role \
@@ -80,27 +84,96 @@ pipeline {
             }
         }
 
-        stage('Terraform Init') {
+        stage('Check Terraform Changes') {
             steps {
                 script {
-                    sh 'terraform init'
+                    // Compare against origin/main to catch all unreviewed changes
+                    env.TF_CHANGES = sh(
+                        script: """
+                        git fetch origin main
+                        changed=\$(git diff --name-only HEAD origin/main -- ${TF_DIR}/)
+                        echo "\$changed" | grep -q ".tf\$" && echo "true" || echo "false"
+                        """,
+                        returnStdout: true
+                    ).trim()
+
+                    echo "Terraform changes detected: ${env.TF_CHANGES}"
+                    if (env.TF_CHANGES == 'true') {
+                        env.TF_CHANGED_FILES = sh(
+                            script: "git diff --name-only HEAD origin/main -- ${TF_DIR}/ | grep '.tf\$'",
+                            returnStdout: true
+                        ).trim()
+                        echo "Changed files:\n${env.TF_CHANGED_FILES}"
+                    }
                 }
             }
         }
 
-        stage('Terraform Plan') {
+        stage('Terraform Init/Plan') {
+            when {
+                expression { env.TF_CHANGES == 'true' }
+            }
             steps {
-                script {
-                    sh "terraform plan -var-file=${params.Organization_Environment}.tfvars -out=tfplan"
+                dir(TF_DIR) {
+                    sh """
+                    terraform init -backend-config=backend-${TF_ENV}.conf
+                    terraform plan -var-file=${TF_VARS_FILE} -out=tfplan
+                    """
+                    archiveArtifacts artifacts: 'tfplan'
                 }
             }
         }
 
-        stage('Terraform Apply') {
+        stage('Terraform Apply (Conditional)') {
+            when {
+                expression { env.TF_CHANGES == 'true' }
+            }
+            steps {
+                dir(TF_DIR) {
+                    script {
+                        if (TF_ENV == 'prd') {
+                            timeout(time: 15, unit: 'MINUTES') {
+                                input(message: "Approve PROD deployment?", ok: "Deploy")
+                            }
+                        }
+                        sh "terraform apply ${TF_ENV == 'dev' ? '-auto-approve' : ''} tfplan"
+                    }
+                }
+            }
+        }
+
+        stage('Build & Deploy App') {
             steps {
                 script {
-                    sh 'terraform apply -auto-approve tfplan'
-                    echo "✅ Successfully deployed to ${params.InvoxaAccount}"
+                    echo "Deploying app to ${params.Organization_Environment} environment"
+                    
+                    // Get outputs from Terraform if available
+                    def clusterName = ""
+                    def serviceName = ""
+                    if (env.TF_CHANGES == 'true') {
+                        dir(TF_DIR) {
+                            clusterName = sh(
+                                script: 'terraform output -raw ecs_cluster_name',
+                                returnStdout: true
+                            ).trim()
+                            serviceName = sh(
+                                script: 'terraform output -raw ecs_service_name',
+                                returnStdout: true
+                            ).trim()
+                        }
+                    }
+                    
+                    // Fallback to naming convention if no Terraform outputs
+                    clusterName = clusterName ?: "${params.Organization_Environment}-cluster"
+                    serviceName = serviceName ?: "${params.Organization_Environment}-service"
+                    
+                    sh """
+                    aws ecs update-service \
+                        --cluster ${clusterName} \
+                        --service ${serviceName} \
+                        --region ${params.RegionName} \
+                        --force-new-deployment
+                    """
                 }
             }
         }
@@ -109,10 +182,14 @@ pipeline {
     post {
         always {
             script {
-                // Cleanup credentials only
+                // Cleanup credentials
                 env.AWS_ACCESS_KEY_ID = ''
                 env.AWS_SECRET_ACCESS_KEY = ''
                 env.AWS_SESSION_TOKEN = ''
+                
+                // Notify deployment result
+                echo "Deployment to ${params.Organization_environment} completed with status: ${currentBuild.currentResult}"
+                cleanWs()
             }
         }
     }

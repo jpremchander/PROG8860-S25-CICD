@@ -69,7 +69,7 @@ pipeline {
                 script {
                     if (params.Organization_Environment == 'dev') {
                         env.AWS_ROLE_ARN = "arn:aws:iam::${params.InvoxaAccountNo}:role/RINX_DEVAWS_JENKINS_ADM"
-                        sh '''
+                    sh '''
                         aws sts assume-role \
                         --role-arn ${env.AWS_ROLE_ARN} \
                         --role-session-name jenkins-${params.Organization_Environment}-${BUILD_NUMBER} \
@@ -81,7 +81,7 @@ pipeline {
                         env.AWS_SESSION_TOKEN = creds.Credentials.SessionToken
                     } else {
                         env.AWS_ROLE_ARN = "arn:aws:iam::${params.InvoxaAccountNo}:role/RINX_PRDAWS_JENKINS_ADM"
-                        sh '''
+                    sh '''
                         aws sts assume-role \ 
                         --role-arn ${env.AWS_ROLE_ARN} \
                         --role-session-name jenkins-${params.Organization_Environment}-${BUILD_NUMBER} \    

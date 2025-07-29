@@ -67,19 +67,31 @@ pipeline {
         stage('Assume AWS Role') {
             steps {
                 script {
-                    def roleArn = "arn:aws:iam::857736875915:role/RINX_${params.Organization_Environment.toUpperCase()}AWS_JENKINS_ADM"
-                    
-                    def creds = sh(returnStdout: true, script: """
+                    if (params.Organization_Environment == 'dev') {
+                        env.AWS_ROLE_ARN = "arn:aws:iam::${params.InvoxaAccountNo}:role/RINX_DEVAWS_JENKINS_ADM"
+                        sh '''
                         aws sts assume-role \
-                        --role-arn ${roleArn} \
+                        --role-arn ${env.AWS_ROLE_ARN} \
                         --role-session-name jenkins-${params.Organization_Environment}-${BUILD_NUMBER} \
                         --output json
-                    """).trim()
-                    
-                    def json = readJSON text: creds
-                    env.AWS_ACCESS_KEY_ID = json.Credentials.AccessKeyId
-                    env.AWS_SECRET_ACCESS_KEY = json.Credentials.SecretAccessKey
-                    env.AWS_SESSION_TOKEN = json.Credentials.SessionToken
+                    '''
+                        def creds = readJSON text: sh(script: 'aws sts assume-role --role-arn ${env.AWS_ROLE_ARN} --role-session-name jenkins-${params.Organization_Environment}-${BUILD_NUMBER} --output json', returnStdout: true)
+                        env.AWS_ACCESS_KEY_ID = creds.Credentials.AccessKeyId
+                        env.AWS_SECRET_ACCESS_KEY = creds.Credentials.SecretAccessKey
+                        env.AWS_SESSION_TOKEN = creds.Credentials.SessionToken
+                    } else {
+                        env.AWS_ROLE_ARN = "arn:aws:iam::${params.InvoxaAccountNo}:role/RINX_PRDAWS_JENKINS_ADM"
+                        sh '''
+                        aws sts assume-role \ 
+                        --role-arn ${env.AWS_ROLE_ARN} \
+                        --role-session-name jenkins-${params.Organization_Environment}-${BUILD_NUMBER} \    
+                        --output json
+                    '''
+                        def creds = readJSON text: sh(script: 'aws sts assume-role --role-arn ${env.AWS_ROLE_ARN} --role-session-name jenkins-${params.Organization_Environment}-${BUILD_NUMBER} --output json', returnStdout: true)
+                        env.AWS_ACCESS_KEY_ID = creds.Credentials.AccessKeyId
+                        env.AWS_SECRET_ACCESS_KEY = creds.Credentials.SecretAccessKey
+                        env.AWS_SESSION_TOKEN = creds.Credentials.SessionToken
+                    }
                 }
             }
         }

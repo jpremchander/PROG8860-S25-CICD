@@ -82,9 +82,9 @@ pipeline {
                     } else {
                         env.AWS_ROLE_ARN = "arn:aws:iam::${params.InvoxaAccountNo}:role/RINX_PRDAWS_JENKINS_ADM"
                     sh '''
-                        aws sts assume-role \ 
-                        --role-arn ${env.AWS_ROLE_ARN} \
-                        --role-session-name jenkins-${params.Organization_Environment}-${BUILD_NUMBER} \    
+                        aws sts assume-role
+                        --role-arn ${env.AWS_ROLE_ARN}
+                        --role-session-name jenkins-${params.Organization_Environment}-${BUILD_NUMBER}
                         --output json
                     '''
                         def creds = readJSON text: sh(script: 'aws sts assume-role --role-arn ${env.AWS_ROLE_ARN} --role-session-name jenkins-${params.Organization_Environment}-${BUILD_NUMBER} --output json', returnStdout: true)

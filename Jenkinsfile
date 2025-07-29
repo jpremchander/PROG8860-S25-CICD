@@ -12,89 +12,180 @@ pipeline {
         stage('Setup Parameters') {
             steps {
                 script {
-                    // Validate environment selection before setting parameters
-                    if (!params.Organization_Environment in ['dev', 'prd']) {
-                        error "Invalid environment selected: ${params.Organization_Environment}"
-                    }
-
-                    properties([
-                        parameters([
-                            choice(
-                                name: 'Organization_Environment',
-                                choices: ['dev', 'prd'],
-                                description: 'Select deployment environment (dev/prd)'
-                            ),
+                   String sectionHeaderStyle = '''
+                   color: white;
+                   background: dimgrey;
+                   font-family: Roboto, sans-serif !important;
+                   padding: 5px;
+                   text-align: center;
+                   '''
+                   String separatorStyle = '''
+                       border: 0;
+                       border-bottom: 3px;
+                       background: #999;
+                   '''
+                properties([
+                               $class: 'ParameterSeparator',
+                               name: 'Tag_HEADER',
+                               sectionHeader: 'INVOXA',
+                               separatorStyle: separatorStyle,
+                               sectionHeaderStyle: sectionHeaderStyle
+                           ],
+                           choice(
+                               choices: ['dev','prd'],
+                               name: 'Organization_Environment',
+                               description: "Select Organization Environment"
+                           ),
+                           [
+                               $class: 'CascadeChoiceParameter',
+                               choiceType: 'PT_SINGLE_SELECT',
+                               description: 'Invoxa Account where application will be deployed',
+                               filterLength: 1, filterable: false,
+                               name: 'InvoxaAccount',
+                               randomName: 'choice-parameter-01',
+                               referencedParameters: 'Organization_Environment',
+                               script:
+                               [
+                                   $class: 'GroovyScript',
+                                   fallbackScript:
+                                   [
+                                       classpath: [],
+                                       sandbox: true,
+                                       script: 'return[""]'],
+                                   script: [
+                                       classpath: [],
+                                       sandbox: true,
+                                       script: '''
+                                           if(Organization_Environment.equals('dev'))
+                                           {
+                                           return['invoxa-dev']
+                                           }
+                                           else if(Organization_Environment.equals('prd'))
+                                           {
+                                           return['invoxa-prd']
+                                           }
+                                           else
+                                           {
+                                           return['NA']
+                                           }    
+                                        '''
+                                           ]
+                               ]
+                           ],
+                           [
+                               $class: 'CascadeChoiceParameter',
+                               choiceType: 'PT_SINGLE_SELECT',
+                               description: 'Invoxa Account Number where application will be deployed',
+                               filterLength: 1, filterable: false,
+                               name: 'InvoxaAccountNo',
+                               randomName: 'choice-parameter-02',
+                               referencedParameters: 'InvoxaAccount',
+                               script: [
+                                   $class: 'GroovyScript',
+                                   fallbackScript: [
+                                       classpath: [],
+                                       sandbox: true,
+                                       script: 'return[""]'
+                                   ],
+                                   script: [
+                                       classpath: [],
+                                       sandbox: true,
+                                       script: '''
+                                           if(InvoxaAccount.equals('invoxa-dev')) {
+                                               return['817998750852']
+                                           }
+                                           else if(InvoxaAccount.equals('invoxa-prd')) {
+                                               return['817998750852']
+                                           }
+                                           else {
+                                               return['NA']
+                                           }
+                                       '''
+                                   ]
+                               ]
+                           ],
+                           [
+                               $class: 'CascadeChoiceParameter',
+                               choiceType: 'PT_SINGLE_SELECT',
+                               description: 'Select Region where IAM Role will be Created',
+                               filterLength: 1, filterable: false,
+                               name: 'RegionName',
+                               randomName: 'choice-parameter-03',
+                               referencedParameters: 'InvoxaAccount',
+                               script: [
+                                   $class: 'GroovyScript',
+                                   fallbackScript: [
+                                       classpath: [],
+                                       sandbox: true,
+                                       script: 'return[""]'
+                                   ],
+                                   script: [
+                                       classpath: [],
+                                       sandbox: true,
+                                       script: '''
+                                           if(InvoxaAccount.equals('invoxa-dev') || InvoxaAccount.equals('invoxa-prd')) {
+                                               return['us-east-1']
+                                           }
+                                           else {
+                                               return['NA']
+                                           }    
+                                       '''
+                                   ]
+                               ]
+                           ],
+                           [
+                               $class: 'ParameterSeparator',
+                               name: 'Tag_HEADER',
+                               sectionHeader: 'Tag Details',
+                               separatorStyle: separatorStyle,
+                               sectionHeaderStyle: sectionHeaderStyle
+                           ],
                             string(
-                                name: 'InvoxaAccount',
-                                defaultValue: params.Organization_Environment == 'dev' ? 'invoxa-dev' : 'invoxa-prd',
-                                description: 'AWS Account'
-                            ),
-                            string(
-                                name: 'InvoxaAccountNo',
-                                defaultValue: '817998750852',
-                                description: 'AWS Account Number'
-                            ),
-                            string(
-                                name: 'RegionName',
-                                defaultValue: 'us-east-1',
-                                description: 'AWS Region'
-                            ),
-                            string(
-                                name: 'JIRA_TICKET',
-                                defaultValue: '',
-                                description: 'REQUIRED: Enter your change ticket number'
-                            )
-                        ])
-                    ])
-                }
-            }
-        }
-
-        stage('Validate Inputs') {
-            steps {
-                script {                   
-                    // Cross-validate parameters
-                    if (params.Organization_Environment == 'dev' && params.InvoxaAccount != 'invoxa-dev') {
-                        error "Invalid account for dev environment"
-                    }
-                    if (params.Organization_Environment == 'prd' && params.InvoxaAccount != 'invoxa-prd') {
-                        error "Invalid account for prod environment"
-                    }
-                }
-            }
-        }
+                               name: 'JIRA_Ticket_Number',
+                               defaultValue: '',
+                               description: 'Enter Deployment Ticket Number'
+                           )
+                   ])
+               }
+           }
+       }
 
         stage('Assume AWS Role') {
-            steps {
-                script {
-                    if (params.Organization_Environment == 'dev') {
-                        env.AWS_ROLE_ARN = "arn:aws:iam::${params.InvoxaAccountNo}:role/RINX_DEVAWS_JENKINS_ADM"
-                    sh '''
-                        aws sts assume-role 
-                        --role-arn ${env.AWS_ROLE_ARN} 
-                        --role-session-name jenkins-${params.Organization_Environment}-${BUILD_NUMBER} 
-                        --output json
-                    '''
-                        def creds = readJSON text: sh(script: 'aws sts assume-role --role-arn ${env.AWS_ROLE_ARN} --role-session-name jenkins-${params.Organization_Environment}-${BUILD_NUMBER} --output json', returnStdout: true)
-                        env.AWS_ACCESS_KEY_ID = creds.Credentials.AccessKeyId
-                        env.AWS_SECRET_ACCESS_KEY = creds.Credentials.SecretAccessKey
-                        env.AWS_SESSION_TOKEN = creds.Credentials.SessionToken
-                    } else {
-                        env.AWS_ROLE_ARN = "arn:aws:iam::${params.InvoxaAccountNo}:role/RINX_PRDAWS_JENKINS_ADM"
-                    sh '''
-                        aws sts assume-role
-                        --role-arn ${env.AWS_ROLE_ARN}
-                        --role-session-name jenkins-${params.Organization_Environment}-${BUILD_NUMBER}
-                        --output json
-                    '''
-                        def creds = readJSON text: sh(script: 'aws sts assume-role --role-arn ${env.AWS_ROLE_ARN} --role-session-name jenkins-${params.Organization_Environment}-${BUILD_NUMBER} --output json', returnStdout: true)
-                        env.AWS_ACCESS_KEY_ID = creds.Credentials.AccessKeyId
-                        env.AWS_SECRET_ACCESS_KEY = creds.Credentials.SecretAccessKey
-                        env.AWS_SESSION_TOKEN = creds.Credentials.SessionToken
-                    }
-                }
-            }
-        }
+           steps {
+               script {
+                   // role assume
+                   def assumeRole = { roleArn, sessionName ->
+                       def assumeRoleOutput = sh(
+                           script: """
+                               aws sts assume-role --role-arn ${roleArn} --role-session-name ${sessionName} --output json
+                           """,
+                           returnStdout: true
+                       ).trim()
+                       def json = readJSON text: assumeRoleOutput
+                       return [
+                           accessKey: json.Credentials.AccessKeyId,
+                           secretKey: json.Credentials.SecretAccessKey,
+                           sessionToken: json.Credentials.SessionToken
+                       ]
+                   }
+
+                   // Assuming IAM Roles based On Organization Environment
+                   if (params.InvoxaAccount == 'invoxa-dev') {
+                       def devrole = assumeRole("arn:aws:iam::857736875915:role/RINX_DEVAWS_JENKINS_ADM", "jenkins-dev-adm-session")
+                       env.AWS_ACCESS_KEY_ID = devrole.accessKey
+                       env.AWS_SECRET_ACCESS_KEY = devrole.secretKey
+                       env.AWS_SESSION_TOKEN = devrole.sessionToken
+                       //CTRGB ASSUME ROLE
+                     } else if (params.InvoxaAccount == 'invoxa-prd') {
+                       def prdrole = assumeRole("arn:aws:iam::857736875915:role/RINX_PRDAWS_JENKINS_ADM", "jenkins-prd-adm-session")
+                       env.AWS_ACCESS_KEY_ID = prdrole.accessKey
+                       env.AWS_SECRET_ACCESS_KEY = prdrole.secretKey
+                       env.AWS_SESSION_TOKEN = prdrole.sessionToken
+                   } else {
+                       error "Unsupported Organization Environment: ${params.Organization_Environment}"
+                   }
+               }
+           }
 
         stage('Check Terraform Changes') {
             steps {

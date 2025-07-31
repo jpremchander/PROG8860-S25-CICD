@@ -1,3 +1,5 @@
+import groovy.util.Node
+
 pipeline {
     agent any
 
@@ -141,10 +143,11 @@ pipeline {
                                sectionHeaderStyle: sectionHeaderStyle
                            ],
                             string(
-                               name: 'JIRA_Ticket_Number',
+                               name: 'Deployment_Ticket_Number',
                                defaultValue: '',
                                description: 'Enter Deployment Ticket Number'
                            )
+                        )
                    ])
                }
            }

@@ -1,33 +1,30 @@
 trigger:
-- Azure-Function-App  # ✅ your branch name
+- Azure-Function-App  
 
 stages:
 - stage: Build
   displayName: 'Build Stage'
   jobs:
   - job: Build
-    displayName: 'Build the Function App'
+    displayName: 'Build Python Azure Function'
     pool:
-      vmImage: 'windows-latest'
+      vmImage: 'ubuntu-latest'
     steps:
-    - task: UseDotNet@2
+    - task: UsePythonVersion@0
       inputs:
-        packageType: 'sdk'
-        version: '6.x'  # change if you're using another .NET version
+        versionSpec: '3.12'
     - script: |
-        dotnet restore
-        dotnet build --configuration Release
-      displayName: 'Build the Azure Function'
-    - task: DotNetCoreCLI@2
-      inputs:
-        command: 'publish'
-        publishWebProjects: true
-        arguments: '--configuration Release --output $(Build.ArtifactStagingDirectory)'
-        zipAfterPublish: true
-      displayName: 'Publish Function App'
+        python -m venv env
+        source env/bin/activate
+        pip install -r requirements.txt
+      displayName: 'Install Dependencies'
+    - script: |
+        zip -r function.zip .
+        mkdir -p $(Build.ArtifactStagingDirectory)
+        mv function.zip $(Build.ArtifactStagingDirectory)/
+      displayName: 'Package Function App'
     - publish: '$(Build.ArtifactStagingDirectory)'
       artifact: drop
-      displayName: 'Publish Artifacts'
 
 - stage: Test
   displayName: 'Test Stage'
@@ -36,24 +33,27 @@ stages:
   - job: Test
     displayName: 'Run Unit Tests'
     pool:
-      vmImage: 'windows-latest'
+      vmImage: 'ubuntu-latest'
     steps:
     - script: |
-        dotnet test --configuration Release
-      displayName: 'Run Tests'
+        python -m venv env
+        source env/bin/activate
+        pip install -r requirements.txt
+        pytest tests/  # Make sure your test files are in tests/
+      displayName: 'Run Python Tests'
 
 - stage: Deploy
   displayName: 'Deploy to Azure'
   dependsOn: Test
   jobs:
   - job: Deploy
-    displayName: 'Deploy Function to Azure'
+    displayName: 'Deploy Python Function to Azure'
     pool:
-      vmImage: 'windows-latest'
+      vmImage: 'ubuntu-latest'
     steps:
     - task: AzureFunctionApp@1
       inputs:
-        azureSubscription: 'AFN-CICD-SVC-CONNECTION'   
-        appType: 'functionApp'
-        appName: 'collapse-api-func'                  
-        package: '$(Pipeline.Workspace)/drop/**/*.zip'
+        azureSubscription: 'AFN-CICD-SVC-CONNECTION'  
+        appType: 'functionAppLinux'
+        appName: 'collapse-api-func'                 
+        package: '$(Pipeline.Workspace)/drop/function.zip'

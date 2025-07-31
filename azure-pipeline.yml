@@ -1,3 +1,4 @@
+# Azure Pipeline YAML for Building, Testing, and Deploying an Azure Function App
 trigger:
 - Azure-Function-App
 

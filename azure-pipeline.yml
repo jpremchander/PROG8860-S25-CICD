@@ -8,7 +8,7 @@ stages:
   - job: Build
     displayName: 'Build Python Azure Function'
     pool:
-      name: 'default'
+      name: 'Default'
     steps:
     - task: UsePythonVersion@0
       inputs:
@@ -33,7 +33,7 @@ stages:
   - job: Test
     displayName: 'Run Unit Tests'
     pool:
-      name: 'default'
+      name: 'Default'
     steps:
     - script: |
         python -m venv env
@@ -49,7 +49,7 @@ stages:
   - job: Deploy
     displayName: 'Deploy Python Function to Azure'
     pool:
-      name: 'default'
+      name: 'Default'
     steps:
     - task: AzureFunctionApp@1
       inputs:

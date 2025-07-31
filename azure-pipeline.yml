@@ -8,13 +8,13 @@ stages:
   - job: Build
     displayName: 'Build Python Azure Function'
     pool:
-      name: 'Default'  # Make sure this is a Linux agent pool
+      name: 'Default'  # Ensure this points to your Linux agent
     steps:
     - task: UsePythonVersion@0
       inputs:
         versionSpec: '3.12'
     - script: |
-      pip install -r requirements.txt
+        pip install -r requirements.txt
       workingDirectory: $(Build.SourcesDirectory)
       displayName: 'Install Dependencies'
     - script: |
@@ -33,11 +33,9 @@ stages:
   - job: Test
     displayName: 'Run Unit Tests'
     pool:
-      name: 'Default'  # Linux agent pool
+      name: 'Default'
     steps:
     - script: |
-        python -m venv env
-        source env/bin/activate
         pip install -r requirements.txt
         pytest tests/
       workingDirectory: $(Build.SourcesDirectory)
@@ -50,7 +48,7 @@ stages:
   - job: Deploy
     displayName: 'Deploy Python Function to Azure'
     pool:
-      name: 'Default'  # Linux agent pool
+      name: 'Default'
     steps:
     - task: AzureFunctionApp@1
       inputs:

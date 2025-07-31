@@ -1,5 +1,7 @@
 trigger:
-- Azure-Function-App
+  branches:
+    include:
+      - Azure-Function-App
 
 stages:
 - stage: Build
@@ -8,19 +10,22 @@ stages:
   - job: Build
     displayName: 'Build Python Azure Function'
     pool:
-      name: 'Default'  # Targeting your self-hosted Windows agent
+      name: 'Default'  # Your self-hosted Windows agent
     steps:
     - task: UsePythonVersion@0
       inputs:
         versionSpec: '3.12'
+
     - script: |
         pip install -r requirements.txt
       workingDirectory: $(Build.SourcesDirectory)
       displayName: 'Install Dependencies'
+
     - powershell: |
         Add-Type -Assembly 'System.IO.Compression.FileSystem'
         [IO.Compression.ZipFile]::CreateFromDirectory("$(Build.SourcesDirectory)", "$(Build.ArtifactStagingDirectory)\function.zip")
       displayName: 'Package Function App'
+
     - publish: '$(Build.ArtifactStagingDirectory)'
       artifact: drop
 
@@ -35,7 +40,7 @@ stages:
     steps:
     - script: |
         pip install -r requirements.txt
-        pytest tests/
+        python -m pytest tests/
       workingDirectory: $(Build.SourcesDirectory)
       displayName: 'Run Python Tests'
 
@@ -50,7 +55,7 @@ stages:
     steps:
     - task: AzureFunctionApp@1
       inputs:
-        azureSubscription: 'AFN-CICD-SVC-CONNECTION'  
-        appType: 'functionAppWindows'  # Since your agent is Windows, make sure your Function App matches
-        appName: 'collapse-api-func'                 
+        azureSubscription: 'AFN-CICD-SVC-CONNECTION'
+        appType: 'functionAppWindows'  # If you're using Windows-based Azure Function App
+        appName: 'collapse-api-func'
         package: '$(Pipeline.Workspace)/drop/function.zip'

@@ -8,7 +8,7 @@ stages:
   - job: Build
     displayName: 'Build Python Azure Function'
     pool:
-      name: 'Default'
+      name: 'Default'  # Make sure this is a Linux agent pool
     steps:
     - task: UsePythonVersion@0
       inputs:
@@ -17,11 +17,13 @@ stages:
         python -m venv env
         source env/bin/activate
         pip install -r requirements.txt
+      workingDirectory: $(Build.SourcesDirectory)
       displayName: 'Install Dependencies'
     - script: |
         zip -r function.zip .
         mkdir -p $(Build.ArtifactStagingDirectory)
         mv function.zip $(Build.ArtifactStagingDirectory)/
+      workingDirectory: $(Build.SourcesDirectory)
       displayName: 'Package Function App'
     - publish: '$(Build.ArtifactStagingDirectory)'
       artifact: drop
@@ -33,13 +35,14 @@ stages:
   - job: Test
     displayName: 'Run Unit Tests'
     pool:
-      name: 'Default'
+      name: 'Default'  # Linux agent pool
     steps:
     - script: |
         python -m venv env
         source env/bin/activate
         pip install -r requirements.txt
-        pytest tests/  # Make sure your test files are in tests/
+        pytest tests/
+      workingDirectory: $(Build.SourcesDirectory)
       displayName: 'Run Python Tests'
 
 - stage: Deploy
@@ -49,7 +52,7 @@ stages:
   - job: Deploy
     displayName: 'Deploy Python Function to Azure'
     pool:
-      name: 'Default'
+      name: 'Default'  # Linux agent pool
     steps:
     - task: AzureFunctionApp@1
       inputs:

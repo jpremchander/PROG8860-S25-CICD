@@ -8,7 +8,7 @@ stages:
   - job: Build
     displayName: 'Build Python Azure Function'
     pool:
-      name: 'Default'  # Ensure this points to your Linux agent
+      name: 'Default'  # Targeting your self-hosted Windows agent
     steps:
     - task: UsePythonVersion@0
       inputs:
@@ -17,11 +17,9 @@ stages:
         pip install -r requirements.txt
       workingDirectory: $(Build.SourcesDirectory)
       displayName: 'Install Dependencies'
-    - script: |
-        zip -r function.zip .
-        mkdir -p $(Build.ArtifactStagingDirectory)
-        mv function.zip $(Build.ArtifactStagingDirectory)/
-      workingDirectory: $(Build.SourcesDirectory)
+    - powershell: |
+        Add-Type -Assembly 'System.IO.Compression.FileSystem'
+        [IO.Compression.ZipFile]::CreateFromDirectory("$(Build.SourcesDirectory)", "$(Build.ArtifactStagingDirectory)\function.zip")
       displayName: 'Package Function App'
     - publish: '$(Build.ArtifactStagingDirectory)'
       artifact: drop
@@ -53,6 +51,6 @@ stages:
     - task: AzureFunctionApp@1
       inputs:
         azureSubscription: 'AFN-CICD-SVC-CONNECTION'  
-        appType: 'functionAppLinux'
+        appType: 'functionAppWindows'  # Since your agent is Windows, make sure your Function App matches
         appName: 'collapse-api-func'                 
         package: '$(Pipeline.Workspace)/drop/function.zip'

@@ -1,5 +1,5 @@
 trigger:
-- Azure-Function-App  
+- Azure-Function-App
 
 stages:
 - stage: Build

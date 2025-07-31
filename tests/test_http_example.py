@@ -1,4 +1,4 @@
-import HttpExample.__init__ as function
+from HttpExample import main as function
 
 class MockRequest:
     def __init__(self):

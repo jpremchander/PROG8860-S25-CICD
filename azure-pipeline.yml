@@ -1,6 +1,5 @@
-# Azure Pipeline YAML for Building, Testing, and Deploying an Azure Function App
 trigger:
-- Azure-Function-App
+- Azure-Function-App  # ✅ your branch name
 
 stages:
 - stage: Build
@@ -14,7 +13,7 @@ stages:
     - task: UseDotNet@2
       inputs:
         packageType: 'sdk'
-        version: '6.x'  # or change to match your .NET version
+        version: '6.x'  # change if you're using another .NET version
     - script: |
         dotnet restore
         dotnet build --configuration Release
@@ -54,7 +53,7 @@ stages:
     steps:
     - task: AzureFunctionApp@1
       inputs:
-        azureSubscription: 'AzureCICDConnection'   
+        azureSubscription: 'AFN-CICD-SVC-CONNECTION'   
         appType: 'functionApp'
-        appName: 'collapse-api-func'               
+        appName: 'collapse-api-func'                  
         package: '$(Pipeline.Workspace)/drop/**/*.zip'

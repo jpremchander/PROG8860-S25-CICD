@@ -1,0 +1,91 @@
+trigger:
+  - Azure-Function-App
+
+stages:
+  # -------------------- BUILD STAGE --------------------
+  - stage: Build
+    displayName: "Build Stage"
+    jobs:
+      - job: Build
+        displayName: "Build Node.js Azure Function"
+        pool:
+          name: Default
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: "20.x"
+            displayName: "Install Node.js"
+
+          - script: |
+              npm install
+              npm run build
+            displayName: "Install dependencies and build"
+
+          # Copy only the files required for deployment
+          - task: CopyFiles@2
+            inputs:
+              SourceFolder: "$(System.DefaultWorkingDirectory)"
+              Contents: |
+                host.json
+                local.settings.json
+                package.json
+                package-lock.json
+                **/*.js
+                **/*.json
+                **/function.json
+              TargetFolder: "$(Build.ArtifactStagingDirectory)/staging"
+            displayName: "Prepare deployment files"
+
+          # Archive the clean staging folder
+          - task: ArchiveFiles@2
+            inputs:
+              rootFolderOrFile: "$(Build.ArtifactStagingDirectory)/staging"
+              includeRootFolder: false
+              archiveType: zip
+              archiveFile: "$(Build.ArtifactStagingDirectory)/functionapp.zip"
+              replaceExistingArchive: true
+
+          # Publish only the zip
+          - publish: "$(Build.ArtifactStagingDirectory)/functionapp.zip"
+            artifact: drop
+
+  # -------------------- TEST STAGE --------------------
+  - stage: Test
+    displayName: "Test Stage"
+    dependsOn: Build
+    jobs:
+      - job: Test
+        displayName: "Run Unit Tests"
+        pool:
+          name: Default
+        steps:
+          - task: NodeTool@0
+            inputs:
+              versionSpec: "20.x"
+            displayName: "Install Node.js"
+
+          - script: |
+              npm install
+              npm test
+            displayName: "Run Unit Tests"
+
+  # -------------------- DEPLOY STAGE --------------------
+  - stage: Deploy
+    displayName: "Deploy Stage"
+    dependsOn: Test
+    jobs:
+      - job: Deploy
+        displayName: "Deploy to Azure Function App"
+        pool:
+          name: Default
+        steps:
+          # Download the artifact from previous stage
+          - download: current
+            artifact: drop
+
+          - task: AzureFunctionApp@1
+            inputs:
+              azureSubscription: "AFN-CICD-SVC-CONNECTION"
+              appType: "functionApp"
+              appName: "azure-func-demo"
+              package: "$(Pipeline.Workspace)/drop/functionapp.zip"

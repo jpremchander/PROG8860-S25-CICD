@@ -53,9 +53,14 @@ stages:
     pool:
       name: 'Default'
     steps:
+    - task: DownloadPipelineArtifact@2
+      inputs:
+        artifact: drop
+        path: $(Pipeline.Workspace)/drop
+
     - task: AzureFunctionApp@1
       inputs:
         azureSubscription: 'AFN-CICD-SVC-CONNECTION'
-        appType: 'functionAppWindows'  # If you're using Windows-based Azure Function App
+        appType: 'functionAppWindows'
         appName: 'collapse-api-func'
         package: '$(Pipeline.Workspace)/drop/function.zip'

@@ -12,6 +12,8 @@ stages:
     pool:
       name: 'Default'  # Your self-hosted Windows agent
     steps:
+    - checkout: self  # 🔧 Ensure code is available
+
     - task: UsePythonVersion@0
       inputs:
         versionSpec: '3.12'
@@ -38,6 +40,8 @@ stages:
     pool:
       name: 'Default'
     steps:
+    - checkout: self  # 🔧 Needed to access source code
+
     - script: |
         pip install -r requirements.txt
         python -m pytest tests/
@@ -53,6 +57,8 @@ stages:
     pool:
       name: 'Default'
     steps:
+    - checkout: self  # 🔧 Best practice for consistency
+
     - task: DownloadPipelineArtifact@2
       inputs:
         artifact: drop

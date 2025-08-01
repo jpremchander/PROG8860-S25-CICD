@@ -87,5 +87,5 @@ stages:
             inputs:
               azureSubscription: "AFN-CICD-SVC-CONNECTION"
               appType: "functionApp"
-              appName: "azure-func-demo"
+              appName: "Azure-Function-CICD"
               package: "$(Pipeline.Workspace)/drop/functionapp.zip"

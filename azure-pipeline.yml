@@ -87,5 +87,5 @@ stages:
             inputs:
               azureSubscription: "AFN-CICD-SVC-CONNECTION"
               appType: "functionApp"
-              appName: "prem-func-demoapp"
+              appName: "prem-func-demoapp" # Updated app name
               package: "$(Pipeline.Workspace)/drop/functionapp.zip"

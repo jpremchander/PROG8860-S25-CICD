@@ -1,0 +1,20 @@
+{
+  "name": "hello-world-azure-function",
+  "version": "1.0.0",
+  "description": "Azure Function Hello World with Jenkins CI/CD Pipeline",
+  "main": "index.js",
+  "scripts": {
+    "test": "jest",
+    "start": "func start",
+    "build": "npm install"
+  },
+  "dependencies": {
+    "@azure/functions": "^4.0.0"
+  },
+  "devDependencies": {
+    "jest": "^29.0.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

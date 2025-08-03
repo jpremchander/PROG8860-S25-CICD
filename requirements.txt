@@ -1,8 +1,0 @@
-aws-cdk-lib==2.204.0
-constructs==10.4.2
-jsii==1.112.0
-python-dateutil==2.9.0.post0
-six==1.17.0
-attrs==25.3.0
-typeguard==2.13.3
-typing_extensions==4.14.1

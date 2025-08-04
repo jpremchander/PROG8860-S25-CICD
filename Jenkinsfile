@@ -47,6 +47,19 @@ pipeline {
 
         stage('Package') {
             steps {
+                echo "\nPackaging Azure Function app..."
+                sh '''
+                rm -rf deployment function-app.zip
+                mkdir -p deployment/HelloWorld
+                cp package.json host.json deployment/
+                cp -r HelloWorld deployment/
+                '''
+            }
+        }
+
+/*
+        stage('Package') {
+            steps {
                 echo 'Packaging Azure Function app...'
                 sh '''
                     rm -rf deployment function-app.zip
@@ -61,6 +74,7 @@ pipeline {
             }
         }
 
+*/
         stage('Azure Login & Deploy') {
             steps {
                 echo 'Logging into Azure and deploying...'

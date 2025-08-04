@@ -47,34 +47,19 @@ pipeline {
 
         stage('Package') {
             steps {
-                echo "\nPackaging Azure Function app..."
-                sh '''
-                rm -rf deployment function-app.zip
-                mkdir -p deployment/HelloWorld
-                cp package.json host.json deployment/
-                cp -r HelloWorld deployment/
-                '''
-            }
-        }
-
-/*
-        stage('Package') {
-            steps {
                 echo 'Packaging Azure Function app...'
                 sh '''
                     rm -rf deployment function-app.zip
-                    mkdir deployment
+                    mkdir -p deployment/HelloWorld
                     cp package.json host.json deployment/
-                    cp -r src deployment/src
+                    cp -r HelloWorld deployment/
                     cd deployment
-                    npm install --production
+                    zip -r ../function-app.zip *
                     cd ..
-                    zip -r function-app.zip deployment/*
                 '''
             }
         }
 
-*/
         stage('Azure Login & Deploy') {
             steps {
                 echo 'Logging into Azure and deploying...'
@@ -107,10 +92,10 @@ pipeline {
 
                     echo "Function URL: $FUNCTION_URL"
 
-                    RESPONSE=$(curl -s -w "%{http_code}" $FUNCTION_URL?name=TestUser)
-                    echo "Response: $RESPONSE"
+                    RESPONSE_BODY=$(curl -s "$FUNCTION_URL?name=TestUser")
+                    echo "Response Body: $RESPONSE_BODY"
 
-                    if echo "$RESPONSE" | grep -q "Hello"; then
+                    if echo "$RESPONSE_BODY" | grep -q "Hello"; then
                         echo "✅ Deployment verification succeeded."
                     else
                         echo "❌ Deployment verification failed."

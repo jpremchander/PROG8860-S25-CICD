@@ -19,11 +19,11 @@ pipeline {
                 script {
                     // Clean any previous builds
                     if (fileExists('node_modules')) {
-                        bat 'rmdir /s /q node_modules'
+                        sh 'rm -rf node_modules'
                     }
                     
                     // Install dependencies
-                    bat 'npm install'
+                    sh 'npm install'
                     
                     echo '✅ Build completed successfully'
                 }
@@ -37,7 +37,7 @@ pipeline {
                 script {
                     try {
                         // Run Jest tests
-                        bat 'npm test'
+                        sh 'npm test'
                         echo '✅ All tests passed successfully'
                     } catch (Exception e) {
                         echo "❌ Tests failed: ${e.message}"
@@ -55,38 +55,38 @@ pipeline {
                 script {
                     try {
                         // Login to Azure using service principal
-                        bat """
-                            az login --service-principal -u %AZURE_CLIENT_ID% -p %AZURE_CLIENT_SECRET% --tenant %AZURE_TENANT_ID%
+                        sh """
+                            az login --service-principal -u \$AZURE_CLIENT_ID -p \$AZURE_CLIENT_SECRET --tenant \$AZURE_TENANT_ID
                         """
                         
                         // Set the subscription
-                        bat """
-                            az account set --subscription %AZURE_SUBSCRIPTION_ID%
+                        sh """
+                            az account set --subscription \$AZURE_SUBSCRIPTION_ID
                         """
                         
                         // Verify resource group exists
-                        def rgExists = bat(
-                            script: "az group show --name %RESOURCE_GROUP% --output table",
+                        def rgExists = sh(
+                            script: "az group show --name \$RESOURCE_GROUP --output table",
                             returnStatus: true
                         )
                         
                         if (rgExists != 0) {
                             echo "Creating resource group: ${RESOURCE_GROUP}"
-                            bat """
-                                az group create --name %RESOURCE_GROUP% --location "%AZURE_REGION%"
+                            sh """
+                                az group create --name \$RESOURCE_GROUP --location "\$AZURE_REGION"
                             """
                         }
                         
                         // Check if function app exists
-                        def appExists = bat(
-                            script: "az functionapp show --name %FUNCTION_APP_NAME% --resource-group %RESOURCE_GROUP% --output table",
+                        def appExists = sh(
+                            script: "az functionapp show --name \$FUNCTION_APP_NAME --resource-group \$RESOURCE_GROUP --output table",
                             returnStatus: true
                         )
                         
                         if (appExists != 0) {
                             echo "Creating function app: ${FUNCTION_APP_NAME}"
-                            bat """
-                                az functionapp create --resource-group %RESOURCE_GROUP% --consumption-plan-location "%AZURE_REGION%" --runtime node --runtime-version 18 --functions-version 4 --name %FUNCTION_APP_NAME% --storage-account premfunc8860storage
+                            sh """
+                                az functionapp create --resource-group \$RESOURCE_GROUP --consumption-plan-location "\$AZURE_REGION" --runtime node --runtime-version 18 --functions-version 4 --name \$FUNCTION_APP_NAME --storage-account premfunc8860storage
                             """
                         }
                         
@@ -95,25 +95,25 @@ pipeline {
                         
                         // Create a clean directory for deployment
                         if (fileExists('deploy')) {
-                            bat 'rmdir /s /q deploy'
+                            sh 'rm -rf deploy'
                         }
-                        bat 'mkdir deploy'
+                        sh 'mkdir -p deploy'
                         
                         // Copy necessary files
-                        bat 'copy package.json deploy\\'
-                        bat 'copy host.json deploy\\'
-                        bat 'xcopy src deploy\\src\\ /E /I'
+                        sh 'cp package.json deploy/'
+                        sh 'cp host.json deploy/'
+                        sh 'cp -r src deploy/'
                         
                         // Install production dependencies in deploy folder
-                        bat 'cd deploy && npm install --production'
+                        sh 'cd deploy && npm install --production'
                         
                         // Create zip package
-                        bat 'cd deploy && powershell "Compress-Archive -Path * -DestinationPath ..\\deployment.zip -Force"'
+                        sh 'cd deploy && zip -r ../deployment.zip .'
                         
                         // Deploy the function app
                         echo "Deploying function app..."
-                        bat """
-                            az functionapp deployment source config-zip --resource-group %RESOURCE_GROUP% --name %FUNCTION_APP_NAME% --src deployment.zip
+                        sh """
+                            az functionapp deployment source config-zip --resource-group \$RESOURCE_GROUP --name \$FUNCTION_APP_NAME --src deployment.zip
                         """
                         
                         // Wait for deployment to complete
@@ -128,7 +128,7 @@ pipeline {
                         error("Deploy stage failed")
                     } finally {
                         // Logout from Azure
-                        bat 'az logout || echo "Already logged out"'
+                        sh 'az logout || echo "Already logged out"'
                     }
                 }
             }
@@ -142,10 +142,10 @@ pipeline {
             // Clean up deployment artifacts
             script {
                 if (fileExists('deployment.zip')) {
-                    bat 'del deployment.zip'
+                    sh 'rm -f deployment.zip'
                 }
                 if (fileExists('deploy')) {
-                    bat 'rmdir /s /q deploy'
+                    sh 'rm -rf deploy'
                 }
             }
         }

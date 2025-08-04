@@ -47,14 +47,14 @@ pipeline {
 
         stage('Package') {
             steps {
-                echo 'Packaging Azure Function app...'
+                echo "\nPackaging Azure Function app..."
                 sh '''
                     rm -rf deployment function-app.zip
                     mkdir -p deployment/HelloWorld
                     cp package.json host.json deployment/
                     cp -r HelloWorld deployment/
                     cd deployment
-                    zip -r ../function-app.zip *
+                    zip -r ../function-app.zip HelloWorld host.json package.json
                     cd ..
                 '''
             }
@@ -78,32 +78,6 @@ pipeline {
                 '''
             }
         }
-
-stage('Verify Deployment') {
-    steps {
-        echo 'Verifying deployed function...'
-        sh '''
-            FUNCTION_URL=$(az functionapp function show \
-                --resource-group "$RESOURCE_GROUP" \
-                --name "$FUNCTION_APP_NAME" \
-                --function-name HelloWorld \
-                --query "invokeUrlTemplate" \
-                --output tsv)
-
-            echo "Function URL: $FUNCTION_URL"
-
-            RESPONSE_BODY=$(curl -s "$FUNCTION_URL?name=TestUser")
-            echo "Response Body: $RESPONSE_BODY"
-
-            if echo "$RESPONSE_BODY" | grep -q "Hello"; then
-                echo "✅ Deployment verification succeeded."
-            else
-                echo "❌ Deployment verification failed."
-                exit 1
-            fi
-        '''
-    }
-}
 
         stage('Verify Deployment') {
             steps {

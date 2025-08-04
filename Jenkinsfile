@@ -70,10 +70,26 @@ pipeline {
 
                     az account set --subscription "$AZURE_SUBSCRIPTION_ID"
 
+                    # Ensure proper runtime settings
+                    echo "Setting Function App configuration..."
+                    az functionapp config appsettings set \
+                        --resource-group "$RESOURCE_GROUP" \
+                        --name "$FUNCTION_APP_NAME" \
+                        --settings \
+                            FUNCTIONS_WORKER_RUNTIME=node \
+                            WEBSITE_NODE_DEFAULT_VERSION=~18 \
+                            FUNCTIONS_EXTENSION_VERSION=~4
+
+                    # Deploy the function
+                    echo "Deploying function package..."
                     az functionapp deployment source config-zip \
                         --resource-group "$RESOURCE_GROUP" \
                         --name "$FUNCTION_APP_NAME" \
                         --src function-app.zip
+
+                    # Wait a moment for the deployment to stabilize
+                    echo "Waiting for deployment to stabilize..."
+                    sleep 10
                 '''
             }
         }

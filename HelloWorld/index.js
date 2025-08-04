@@ -4,8 +4,8 @@ const { app } = require('@azure/functions');
 const helloWorldHandler = async (request, context) => {
     context.log(`Http function processed request for url "${request.url}"`);
 
-    const name = request.query.get('name') || request.body?.name || 'World';
-    
+    const name = request.query?.name || request.body?.name || 'World';
+
     return { 
         status: 200,
         body: `Hello, ${name}!`,

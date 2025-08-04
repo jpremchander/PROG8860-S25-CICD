@@ -49,13 +49,13 @@ pipeline {
             steps {
                 echo "\nPackaging Azure Function app..."
                 sh '''
-                    rm -rf deployment function-app.zip
-                    mkdir -p deployment/HelloWorld
-                    cp package.json host.json deployment/
-                    cp -r HelloWorld deployment/
-                    cd deployment
-                    zip -r ../function-app.zip HelloWorld host.json package.json
-                    cd ..
+                rm -rf deployment function-app.zip
+                mkdir -p deployment/HelloWorld
+                cp package.json host.json deployment/
+                cp -r HelloWorld deployment/
+                cd deployment
+                zip -r ../function-app.zip HelloWorld host.json package.json
+                cd ..
                 '''
             }
         }
@@ -82,26 +82,39 @@ pipeline {
         stage('Verify Deployment') {
             steps {
                 echo 'Verifying deployed function...'
-                sh '''
-                    FUNCTION_URL=$(az functionapp function show \
-                        --resource-group "$RESOURCE_GROUP" \
-                        --name "$FUNCTION_APP_NAME" \
-                        --function-name HelloWorld \
-                        --query "invokeUrlTemplate" \
-                        --output tsv)
+                script {
+                    def functionUrl = sh(
+                        script: """az functionapp function show \
+                            --resource-group "$RESOURCE_GROUP" \
+                            --name "$FUNCTION_APP_NAME" \
+                            --function-name HelloWorld \
+                            --query invokeUrlTemplate --output tsv""",
+                        returnStdout: true
+                    ).trim()
+                    echo "Function URL: ${functionUrl}"
 
-                    echo "Function URL: $FUNCTION_URL"
+                    def maxRetries = 5
+                    def sleepSeconds = 6
+                    def success = false
 
-                    RESPONSE_BODY=$(curl -s "$FUNCTION_URL?name=TestUser")
-                    echo "Response Body: $RESPONSE_BODY"
+                    for (int i = 1; i <= maxRetries; i++) {
+                        def response = sh(script: "curl -s '${functionUrl}?name=TestUser'", returnStdout: true).trim()
+                        echo "Attempt ${i} response: ${response}"
 
-                    if echo "$RESPONSE_BODY" | grep -q "Hello"; then
-                        echo "✅ Deployment verification succeeded."
-                    else
-                        echo "❌ Deployment verification failed."
-                        exit 1
-                    fi
-                '''
+                        if (response && response.toLowerCase().contains("hello")) {
+                            echo "✅ Deployment verification succeeded."
+                            success = true
+                            break
+                        } else {
+                            echo "Function not ready yet, retrying in ${sleepSeconds} seconds..."
+                            sleep sleepSeconds
+                        }
+                    }
+
+                    if (!success) {
+                        error("❌ Deployment verification failed after ${maxRetries} attempts.")
+                    }
+                }
             }
         }
     }

@@ -8,10 +8,9 @@ pipeline {
         AZURE_TENANT_ID = credentials('azure-tenant-id')
         AZURE_SUBSCRIPTION_ID = credentials('azure-subscription-id')
 
-        // Azure Function App settings — update these
+        // Azure Function App settings
         RESOURCE_GROUP = 'premfunc8860_group'
         FUNCTION_APP_NAME = 'premfunc8860'
-
         NODE_VERSION = '18'
     }
 
@@ -49,13 +48,13 @@ pipeline {
             steps {
                 echo "\nPackaging Azure Function app..."
                 sh '''
-                rm -rf deployment function-app.zip
-                mkdir -p deployment/HelloWorld
-                cp package.json host.json deployment/
-                cp -r HelloWorld deployment/
-                cd deployment
-                zip -r ../function-app.zip HelloWorld host.json package.json
-                cd ..
+                    rm -rf deployment function-app.zip
+                    mkdir -p deployment/HelloWorld
+                    cp package.json host.json deployment/
+                    cp -r HelloWorld deployment/
+                    cd deployment
+                    zip -r ../function-app.zip HelloWorld host.json package.json
+                    cd ..
                 '''
             }
         }
@@ -88,9 +87,11 @@ pipeline {
                             --resource-group "$RESOURCE_GROUP" \
                             --name "$FUNCTION_APP_NAME" \
                             --function-name HelloWorld \
-                            --query invokeUrlTemplate --output tsv""",
+                            --query invokeUrlTemplate \
+                            --output tsv""",
                         returnStdout: true
                     ).trim()
+
                     echo "Function URL: ${functionUrl}"
 
                     def maxRetries = 5
@@ -98,7 +99,11 @@ pipeline {
                     def success = false
 
                     for (int i = 1; i <= maxRetries; i++) {
-                        def response = sh(script: "curl -s '${functionUrl}?name=TestUser'", returnStdout: true).trim()
+                        def response = sh(
+                            script: "curl -s '${functionUrl}?name=TestUser'",
+                            returnStdout: true
+                        ).trim()
+
                         echo "Attempt ${i} response: ${response}"
 
                         if (response && response.toLowerCase().contains("hello")) {

@@ -82,6 +82,7 @@ pipeline {
             steps {
                 echo 'Verifying deployed function...'
                 script {
+                    // Get the function URL
                     def functionUrl = sh(
                         script: """az functionapp function show \
                             --resource-group "$RESOURCE_GROUP" \
@@ -94,30 +95,95 @@ pipeline {
 
                     echo "Function URL: ${functionUrl}"
 
-                    def maxRetries = 5
-                    def sleepSeconds = 6
+                    // Also get the base app URL as a fallback
+                    def appUrl = sh(
+                        script: """az functionapp show \
+                            --resource-group "$RESOURCE_GROUP" \
+                            --name "$FUNCTION_APP_NAME" \
+                            --query defaultHostName \
+                            --output tsv""",
+                        returnStdout: true
+                    ).trim()
+                    
+                    def baseUrl = "https://${appUrl}/api/HelloWorld"
+                    echo "Base URL (fallback): ${baseUrl}"
+
+                    def maxRetries = 8
+                    def sleepSeconds = 10
                     def success = false
+                    def urlsToTry = [functionUrl, baseUrl]
 
-                    for (int i = 1; i <= maxRetries; i++) {
-                        def response = sh(
-                            script: "curl -s '${functionUrl}?name=TestUser'",
-                            returnStdout: true
-                        ).trim()
+                    for (String testUrl : urlsToTry) {
+                        echo "Testing URL: ${testUrl}"
+                        
+                        for (int i = 1; i <= maxRetries; i++) {
+                            try {
+                                // First check if the function endpoint is reachable
+                                def statusCheck = sh(
+                                    script: "curl -s -o /dev/null -w '%{http_code}' '${testUrl}'",
+                                    returnStdout: true
+                                ).trim()
+                                
+                                echo "Attempt ${i} - HTTP Status: ${statusCheck}"
+                                
+                                if (statusCheck == "200") {
+                                    // If we get 200, test with parameter
+                                    def response = sh(
+                                        script: "curl -s '${testUrl}?name=TestUser'",
+                                        returnStdout: true
+                                    ).trim()
 
-                        echo "Attempt ${i} response: ${response}"
+                                    echo "Attempt ${i} response: '${response}'"
 
-                        if (response && response.toLowerCase().contains("hello")) {
-                            echo "✅ Deployment verification succeeded."
-                            success = true
-                            break
-                        } else {
-                            echo "Function not ready yet, retrying in ${sleepSeconds} seconds..."
-                            sleep sleepSeconds
+                                    if (response && response.toLowerCase().contains("hello")) {
+                                        echo "✅ Deployment verification succeeded with URL: ${testUrl}"
+                                        success = true
+                                        break
+                                    }
+                                } else if (statusCheck == "404") {
+                                    echo "Function not found (404), trying different case..."
+                                    // Try lowercase version
+                                    def lowercaseUrl = testUrl.replace("/HelloWorld", "/helloworld")
+                                    def lowercaseResponse = sh(
+                                        script: "curl -s '${lowercaseUrl}?name=TestUser'",
+                                        returnStdout: true
+                                    ).trim()
+                                    
+                                    if (lowercaseResponse && lowercaseResponse.toLowerCase().contains("hello")) {
+                                        echo "✅ Deployment verification succeeded with lowercase URL: ${lowercaseUrl}"
+                                        success = true
+                                        break
+                                    }
+                                }
+                                
+                            } catch (Exception e) {
+                                echo "Error during verification attempt ${i}: ${e.getMessage()}"
+                            }
+                            
+                            if (!success) {
+                                echo "Function not ready yet, retrying in ${sleepSeconds} seconds..."
+                                sleep sleepSeconds
+                            }
                         }
+                        
+                        if (success) break
                     }
 
                     if (!success) {
-                        error("❌ Deployment verification failed after ${maxRetries} attempts.")
+                        // Try to get more diagnostic information
+                        echo "Getting diagnostic information..."
+                        sh """
+                            echo "Function App Status:"
+                            az functionapp show --resource-group "$RESOURCE_GROUP" --name "$FUNCTION_APP_NAME" --query "{state: state, hostNames: hostNames}" --output table
+                            
+                            echo "Function List:"
+                            az functionapp function list --resource-group "$RESOURCE_GROUP" --name "$FUNCTION_APP_NAME" --query "[].{name: name, state: properties.config.bindings[0].type}" --output table
+                            
+                            echo "Recent logs (if available):"
+                            az functionapp log tail --resource-group "$RESOURCE_GROUP" --name "$FUNCTION_APP_NAME" --timeout 5 || echo "Logs not available"
+                        """
+                        
+                        error("❌ Deployment verification failed after ${maxRetries} attempts on all URLs.")
                     }
                 }
             }

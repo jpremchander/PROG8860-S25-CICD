@@ -79,11 +79,3 @@ This assignment successfully demonstrates:
 **Repository:** [PROG8860-S25-CICD](https://github.com/jpremchander/PROG8860-S25-CICD)
 
 ---
-
-## 📜 License
-
-This project is created for educational purposes as part of PROG8860 coursework.
-
----
-
-**🎉 Assignment 3 - COMPLETED SUCCESSFULLY! 🎉**
